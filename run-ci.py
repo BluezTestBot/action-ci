@@ -189,6 +189,8 @@ def compose_email(test_name, test_result, title, submitter, msgid):
     email_cfg = config['email']
     sender = email_cfg['user']
 
+    add_reply_to = False
+
     receivers = []
     if 'only-maintainers' in email_cfg and email_cfg['only-maintainers'] == 'yes':
         # Send only to the addresses in the 'maintainers'
@@ -199,11 +201,18 @@ def compose_email(test_name, test_result, title, submitter, msgid):
         receivers.append(email_cfg['default-to'])
         receivers.append(submitter)
 
+        add_reply_to = True
+
     # Create message
     msg = MIMEMultipart()
     msg['From'] = sender
     msg['To'] = ", ".join(receivers)
     msg['Subject'] = "RE: " + title
+
+    # In case to use default-to address, set Reply-To to mailing list in case
+    # submitter reply to the result email.
+    if add_reply_to:
+        msg['Reply-To'] = email_cfg['default-to']
 
     # Message Header
     msg.add_header('In-Reply-To', msgid)
