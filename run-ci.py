@@ -443,6 +443,7 @@ class CheckBuild(CiBase):
         # bootstrap-configure
         (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
                                         "--enable-external-ell",
+                                        "--disable-midi",
                                         cwd=src_dir)
         if ret:
             self.add_failure(stderr)
