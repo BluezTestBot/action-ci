@@ -533,14 +533,16 @@ def run_ci(args):
 
     return num_fails
 
-TEST_REPORT_PASS = '''####################
+TEST_REPORT_PASS = '''##############################
 Test: {} - PASS
+
 '''
 
-TEST_REPORT_FAIL = '''####################
+TEST_REPORT_FAIL = '''##############################
 Test: {} - {}
 Output:
 {}
+
 '''
 
 def report_ci():
