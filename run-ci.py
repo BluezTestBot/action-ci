@@ -9,6 +9,7 @@ import requests
 import re
 import smtplib
 import email.utils
+from enum import Enum
 from github import Github
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -253,6 +254,14 @@ def compose_email(title, body, submitter, msgid):
     send_email(sender, receivers, msg)
 
 
+class Verdict(Enum):
+    PENDING = 0
+    PASS = 1
+    FAIL = 2
+    ERROR = 3
+    SKIP = 4
+
+
 class CiBase:
     """
     Base class for CI Tests.
@@ -260,7 +269,7 @@ class CiBase:
     name = None
     enable = True
 
-    verdict = "pending"
+    verdict = Verdict.PENDING
     output = ""
 
     def success(self):
