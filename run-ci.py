@@ -527,9 +527,9 @@ def run_ci(args):
         if test.verdict == Verdict.FAIL:
             num_fails += 1
 
-        logger.info(test.name + " result: " + test.verdict)
+        logger.info(test.name + " result: " + test.verdict.name)
         logger.debug("Post message to github: " + test.output)
-        github_pr_post_comment(test.name, test.verdict, test.output)
+        github_pr_post_comment(test.name, test.verdict.name, test.output)
 
     return num_fails
 
