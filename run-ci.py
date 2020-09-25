@@ -273,20 +273,20 @@ class CiBase:
     output = ""
 
     def success(self):
-        self.verdict = "success"
+        self.verdict = Verdict.PASS
 
     def error(self, msg):
-        self.verdict = "error"
+        self.verdict = Verdict.ERROR
         self.output = msg
         raise EndTest
 
     def skip(self, msg):
-        self.verdict = "skipped"
+        self.verdict = Verdict.SKIP
         self.output = msg
         raise EndTest
 
     def add_failure(self, msg):
-        self.verdict = "failure"
+        self.verdict = Verdict.FAIL
         if not self.output:
             self.output = msg
         else:
@@ -295,8 +295,6 @@ class CiBase:
 
 class CheckPatch(CiBase):
     name = "checkpatch"
-    # # private context used for own reference
-    # context = []
 
     checkpatch_pl = '/usr/bin/checkpatch.pl'
 
@@ -328,32 +326,8 @@ class CheckPatch(CiBase):
                                       output)
                 self.add_failure(msg)
 
-                # # Save commit and output in :context for later reference
-                # self.context.append({"commit": commit, "output": output})
-
-        if self.verdict != "failure":
+        if self.verdict != Verdict.FAIL:
             self.success()
-
-    # def notify_failure(self):
-    #     """
-    #     Notify failure to github
-    #     """
-
-    #     logger.debug("Notify failure to github")
-
-    #     # There might be more than one failure in the series and the result
-    #     # is in :context array
-    #     for test_result in self.context:
-    #         commit = test_result['commit']
-    #         result = test_result['output']
-    #         commit_title = commit.commit.message.splitlines()[0]
-    #         patch = patchwork_get_patch_detail_title(commit_title)
-
-    #         compose_email(self.name, result, patch['name'],
-    #                       patch['submitter']['email'], patch['msgid'])
-
-    #     logger.debug("Post message to github: " + test.output)
-    #     github_pr_post_comment(test.name, test.verdict, test.output)
 
     def run_checkpatch(self, sha):
         """
@@ -382,8 +356,6 @@ class CheckPatch(CiBase):
 
 class CheckGitLint(CiBase):
     name = "checkgitlint"
-    # # private context used for own reference
-    # context = []
 
     gitlint_config = '/.gitlint'
 
@@ -415,31 +387,9 @@ class CheckGitLint(CiBase):
                                       output)
                 self.add_failure(msg)
 
-                # # Save commit and output in :context
-                # self.context.append({"commit": commit, "output": output})
-
-        # if self.verdict == "failure":
-        #     self.notify_failure()
-        if self.verdict != "failure":
+        if self.verdict != Verdict.FAIL:
             self.success()
 
-    # def notify_failure(self):
-    #     """
-    #     Notify failure to submitter
-    #     """
-
-    #     logger.debug("Notify failure")
-
-    #     # There might be more than one failure in the series and the result
-    #     # is in :context array
-    #     for test_result in self.context:
-    #         commit = test_result['commit']
-    #         result = test_result['output']
-    #         commit_title = commit.commit.message.splitlines()[0]
-    #         patch = patchwork_get_patch_detail_title(commit_title)
-
-    #         compose_email(self.name, result, patch['name'],
-    #                       patch['submitter']['email'], patch['msgid'])
 
     def run_checkgitlint(self, sha):
         """
@@ -468,15 +418,12 @@ class CheckGitLint(CiBase):
 
 class CheckBuild(CiBase):
     name = "checkbuild"
-    # # private context used for own reference
-    # context = None
 
     def config(self):
         """
         Configure the test cases.
         """
-        # # Set Reference to patchwork series
-        # self.context = pw_series
+        pass
 
     def run(self):
         logger.debug("##### Run CheckBuild Test #####")
@@ -495,43 +442,26 @@ class CheckBuild(CiBase):
                                         cwd=src_dir)
         if ret:
             self.add_failure(stderr)
-            # self.notify_failure()
             raise EndTest
 
         # make
         (ret, stdout, stderr) = run_cmd("make", cwd=src_dir)
         if ret:
             self.add_failure(stderr)
-            # self.notify_failure()
             raise EndTest
 
         # At this point, consider test passed here
         self.success()
 
-    # def notify_failure(self):
-    #     """
-    #     Notify failure to submitter
-    #     """
-
-    #     logger.debug("Notify failure")
-
-    #     patch = self.context['patches'][0]
-
-    #     compose_email(self.name, self.output, self.context['name'],
-    #                   self.context['submitter']['email'], patch['msgid'])
-
 
 class MakeCheck(CiBase):
     name = "makecheck"
-    # # private context used for own reference
-    # context = None
 
     def config(self):
         """
         Configure the test cases.
         """
-        # # Set Reference to patchwork series
-        # self.context = pw_series
+        pass
 
     def run(self):
         logger.debug("##### Run MakeCheck Test #####")
@@ -545,7 +475,7 @@ class MakeCheck(CiBase):
             self.skip("Disabled in configuration")
 
         # Only run if "checkbuild" success
-        if test_suite["checkbuild"].verdict != "success":
+        if test_suite["checkbuild"].verdict != Verdict.PASS:
             logger.info("Checkbuild is not success. skip this test")
             self.skip("checkbuild not success")
             raise EndTest
@@ -555,23 +485,10 @@ class MakeCheck(CiBase):
         (ret, stdout, stderr) = run_cmd("make", "check", cwd=src_dir)
         if ret:
             self.add_failure(stderr)
-            # self.notify_failure()
             return
 
         # At this point, consider test passed here
         self.success()
-
-    # def notify_failure(self):
-    #     """
-    #     Notify failure to submitter
-    #     """
-
-    #     logger.debug("Notify failure")
-
-    #     patch = self.context['patches'][0]
-
-    #     compose_email(self.name, self.output, self.context['name'],
-    #                   self.context['submitter']['email'], patch['msgid'])
 
 
 class EndTest(Exception):
@@ -607,7 +524,7 @@ def run_ci(args):
 
         logger.info("Process test result for " + test.name)
 
-        if test.verdict == "failure":
+        if test.verdict == Verdict.FAIL:
             num_fails += 1
 
         logger.info(test.name + " result: " + test.verdict)
@@ -634,13 +551,13 @@ def report_ci():
     results = ""
 
     for test_name, test in test_suite.items():
-        if test.verdict == "success":
+        if test.verdict == Verdict.PASS:
             results += TEST_REPORT_PASS.format(test_name)
-        if test.verdict == "failure":
+        if test.verdict == Verdict.FAIL:
             results += TEST_REPORT_FAIL.format(test_name, "FAIL", test.output)
-        if test.verdict == "error":
+        if test.verdict == Verdict.ERROR:
             results += TEST_REPORT_FAIL.format(test_name, "ERROR", test.output)
-        if test.verdict == "skipped":
+        if test.verdict == Verdict.SKIP:
             results += TEST_REPORT_FAIL.format(test_name, "SKIPPED", test.output)
 
     body = EMAIL_MESSAGE.format(pw_series["web_url"], results)
