@@ -267,6 +267,7 @@ class CiBase:
     Base class for CI Tests.
     """
     name = None
+    display_name = None
     enable = True
 
     verdict = Verdict.PENDING
@@ -295,6 +296,7 @@ class CiBase:
 
 class CheckPatch(CiBase):
     name = "checkpatch"
+    display_name = "CheckPatch"
 
     checkpatch_pl = '/usr/bin/checkpatch.pl'
 
@@ -356,6 +358,7 @@ class CheckPatch(CiBase):
 
 class CheckGitLint(CiBase):
     name = "checkgitlint"
+    display_name = "CheckGitLint"
 
     gitlint_config = '/.gitlint'
 
@@ -390,7 +393,6 @@ class CheckGitLint(CiBase):
         if self.verdict != Verdict.FAIL:
             self.success()
 
-
     def run_checkgitlint(self, sha):
         """
         Run checkpatch script with commit sha.
@@ -418,6 +420,7 @@ class CheckGitLint(CiBase):
 
 class CheckBuild(CiBase):
     name = "checkbuild"
+    display_name = "CheckBuild"
 
     def config(self):
         """
@@ -456,6 +459,7 @@ class CheckBuild(CiBase):
 
 class MakeCheck(CiBase):
     name = "makecheck"
+    display_name = "MakeCheck"
 
     def config(self):
         """
@@ -554,13 +558,13 @@ def report_ci():
 
     for test_name, test in test_suite.items():
         if test.verdict == Verdict.PASS:
-            results += TEST_REPORT_PASS.format(test_name)
+            results += TEST_REPORT_PASS.format(test.display_name)
         if test.verdict == Verdict.FAIL:
-            results += TEST_REPORT_FAIL.format(test_name, "FAIL", test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name, "FAIL", test.output)
         if test.verdict == Verdict.ERROR:
-            results += TEST_REPORT_FAIL.format(test_name, "ERROR", test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name, "ERROR", test.output)
         if test.verdict == Verdict.SKIP:
-            results += TEST_REPORT_FAIL.format(test_name, "SKIPPED", test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name, "SKIPPED", test.output)
 
     body = EMAIL_MESSAGE.format(pw_series["web_url"], results)
 
