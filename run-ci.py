@@ -778,13 +778,19 @@ def main():
 
     # Assume that the current dir is the top base path
     base_dir = os.path.abspath(os.path.curdir)
-    print("TEDD: BASE_DIR: %s" % base_dir)
     src_dir = args.src_path
-    print("TEDD: SRC_DIR: %s" % src_dir)
     src2_dir = src_dir + "2"
-    print("TEDD: SRC2_DIR: %s" % src2_dir)
     ell_dir = args.ell_path
-    print("TEDD: ELL_DIR: %s" % ell_dir)
+
+    # Fetch commits in the tree for checkpath and gitlint
+    logger.debug("Fetch %d commits in the tree" % github_pr.commits)
+    pr_commits = github_pr.commits
+    (ret, stdout, stderr) = run_cmd("git", "fetch", "--depth=%d" % pr_commits,
+                                    cwd=src_dir)
+    if ret:
+        logger.error("Failed to fetch the PR commits. error=%s" % stderr)
+    else:
+        logger.debug("output>>\n%s" % stdout)
 
     # Run CI tests
     try:
