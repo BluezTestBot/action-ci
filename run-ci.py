@@ -257,6 +257,16 @@ def compose_email(title, body, submitter, msgid):
     # Send email
     send_email(sender, receivers, msg)
 
+def is_workflow_patch(commit):
+    """
+    If the message contains a word "workflow", then return True.
+    This is basically to prevent the workflow patch for github from running
+    checkpath and gitlint tests.
+    """
+    if commit.commit.message.find("workflow:") >= 0:
+        return True
+
+    return False
 
 class Verdict(Enum):
     PENDING = 0
@@ -326,6 +336,11 @@ class CheckPatch(CiBase):
             self.skip("Disabled in configuration")
 
         for commit in github_commits:
+            # Skip test if the patch is workflow path
+            if is_workflow_patch(commit):
+                logger.info("Skip workflow patch")
+                continue
+
             output = self.run_checkpatch(commit.sha)
             if output != None:
                 msg = "{}\n{}".format(commit.commit.message.splitlines()[0],
@@ -390,6 +405,11 @@ class CheckGitLint(CiBase):
             self.skip("Disabled in configuration")
 
         for commit in github_commits:
+            # Skip test if the patch is workflow path
+            if is_workflow_patch(commit):
+                logger.info("Skip workflow patch")
+                continue
+
             output = self.run_checkgitlint(commit.sha)
             if output != None:
                 msg = "{}\n{}".format(commit.commit.message.splitlines()[0],
