@@ -455,7 +455,7 @@ class CheckBuildSetup_ell(CiBase):
             raise EndTest
 
         # install
-        (ret, stdout, stderr) = run_cmd("make install", cwd=ell_dir)
+        (ret, stdout, stderr) = run_cmd("make", "install", cwd=ell_dir)
         if ret:
             self.add_failure(stderr)
             raise EndTest
