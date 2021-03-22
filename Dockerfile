@@ -1,4 +1,4 @@
-FROM blueztestbot/bluez-build:dev
+FROM blueztestbot/bluez-build:test
 
 COPY *.sh /
 COPY *.py /
