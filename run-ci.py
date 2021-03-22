@@ -8,6 +8,7 @@ import configparser
 import requests
 import re
 import smtplib
+import shutil
 import email.utils
 from enum import Enum
 from github import Github
@@ -25,7 +26,10 @@ github_commits = None
 pw_sid = None
 pw_series = None
 
+base_dir = None
 src_dir = None
+src2_dir = None
+ell_dir = None
 
 test_suite = {}
 
@@ -418,6 +422,67 @@ class CheckGitLint(CiBase):
         return output
 
 
+class CheckBuildSetup_ell(CiBase):
+    name = "checkbuildsetupell"
+    display_name = "CheckBuild: Setup ELL"
+
+    def config(self):
+        """
+        Configure the test case
+        """
+        pass
+
+    def run(self):
+        logger.debug("##### Run CheckBuild: Setup ELL #####")
+
+        # Run only if CheckBuild is enabled
+        self.enable = config_enable(config, "checkbuild")
+        if self.enable == False:
+            self.skip("CheckBuild is disabled")
+
+        self.config()
+
+        # bootstrap-configure
+        (ret, stdout, stderr) = run_cmd("./bootstrap-configure", cwd=ell_dir)
+        if ret:
+            self.add_failure(stderr)
+            raise EndTest
+
+        # make
+        (ret, stdout, stderr) = run_cmd("make", cwd=ell_dir)
+        if ret:
+            self.add_failure(stderr)
+            raise EndTest
+
+        # install
+        (ret, stdout, stderr) = run_cmd("make install", cwd=ell_dir)
+        if ret:
+            self.add_failure(stderr)
+            raise EndTest
+
+        self.success()
+
+
+class CheckBuildSetup(CiBase):
+    name = "checkbuildsetup"
+    display_name = "CheckBuild: Setup"
+
+    def config(self):
+        """
+        Config the test case
+        """
+        pass
+
+    def run(self):
+        logger.debug("##### Run CheckBuild: Setup #####")
+
+        self.config()
+
+        # Duplicate the src for 2nd build test case
+        shutil.copytree(src_dir, src2_dir)
+        logger.debug("Duplicate src_dir to src2_dir")
+
+
 class CheckBuild(CiBase):
     name = "checkbuild"
     display_name = "CheckBuild"
@@ -441,7 +506,6 @@ class CheckBuild(CiBase):
 
         # bootstrap-configure
         (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
-                                        "--enable-external-ell",
                                         cwd=src_dir)
         if ret:
             self.add_failure(stderr)
@@ -490,6 +554,45 @@ class MakeCheck(CiBase):
         if ret:
             self.add_failure(stderr)
             return
+
+        # At this point, consider test passed here
+        self.success()
+
+
+class CheckBuildExtEll(CiBase):
+    name = "checkbuild_extell"
+    display_name = "CheckBuild w/external ell"
+
+    def config(self):
+        """
+        Configure the test cases.
+        """
+        pass
+
+    def run(self):
+        logger.debug("##### Run CheckBuild w/exteranl ell Test #####")
+
+        self.enable = config_enable(config, self.name)
+
+        self.config()
+
+        # Check if it is disabled.
+        if self.enable == False:
+            self.skip("Disabled in configuration")
+
+        # bootstrap-configure
+        (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
+                                        "--enable-exteranl-ell",
+                                        cwd=src2_dir)
+        if ret:
+            self.add_failure(stderr)
+            raise EndTest
+
+        # make
+        (ret, stdout, stderr) = run_cmd("make", cwd=src2_dir)
+        if ret:
+            self.add_failure(stderr)
+            raise EndTest
 
         # At this point, consider test passed here
         self.success()
@@ -648,6 +751,10 @@ def parse_args():
                         help='Pull request number')
     parser.add_argument('-r', '--repo', required=True,
                         help='Github repo in :owner/:repo')
+    parser.add_argument('-s', '--src_path', required=True,
+                        help="Path to the BlueZ source")
+    parser.add_argument('-e', '--ell-path', default='ell',
+                        help='Path to ELL source')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Display debugging info')
 
@@ -655,7 +762,7 @@ def parse_args():
 
 def main():
 
-    global src_dir
+    global src_dir, src2_dir, ell_dir, base_dir
 
     args = parse_args()
 
@@ -665,8 +772,15 @@ def main():
 
     init_github(args.repo, args.pr_num)
 
-    # Assume that the current dir is the top source path
-    src_dir = os.path.abspath(os.path.curdir)
+    # Assume that the current dir is the top base path
+    base_dir = os.path.abspath(os.path.curdir)
+    print("TEDD: BASE_DIR: %s" % base_dir)
+    src_dir = args.src_path
+    print("TEDD: SRC_DIR: %s" % src_dir)
+    src2_dir = src_dir + "2"
+    print("TEDD: SRC2_DIR: %s" % src2_dir)
+    ell_dir = args.ell_path
+    print("TEDD: ELL_DIR: %s" % ell_dir)
 
     # Run CI tests
     try:

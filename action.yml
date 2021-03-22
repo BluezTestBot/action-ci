@@ -4,6 +4,9 @@ name: CI
 description: 'CI Action'
 
 inputs:
+  src_path:
+    description: Path of source (relative path from /github/workspace)
+    required: true
   github_token:
     description: github_token
     required: true
@@ -14,6 +17,8 @@ inputs:
 runs:
   using: 'docker'
   image: 'Dockerfile'
+  args:
+    - ${{ inputs.src_path }}
   env:
     GITHUB_TOKEN: ${{ inputs.github_token }}
     EMAIL_TOKEN: ${{ inputs.email_token }}
