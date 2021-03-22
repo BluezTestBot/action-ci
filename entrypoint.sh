@@ -13,14 +13,20 @@ echo "HEAD-REF:   $GITHUB_HEAD_REF"
 echo "BASE-REF:   $GITHUB_BASE_REF"
 echo "PWD:        $(pwd)"
 
+SRC_PATH=$GITHUB_WORKSPACE/$1
+ELL_PATH=$GITHUB_WORKSPACE/ell
+
 if [[ -z $GITHUB_TOKEN ]]
 then
 	echo "Set GITHUB_TOKEN environment variable"
 	exit 1
 fi
 
+echo "Clone ELL source"
+git clone --depth=1 https://git.kernel.org/pub/scm/libs/ell/ell.git $ELL_PATH
+
 # Get PR number from GITHUB_REF (refs/pull/#/merge)
 PR=${GITHUB_REF#"refs/pull/"}
 PR=${PR%"/merge"}
 
-/run-ci.py -c /config.ini -p $PR -r $GITHUB_REPOSITORY -v
+/run-ci.py -c /config.ini -p $PR -r $GITHUB_REPOSITORY -s $SRC_PATH -e $ELL_PATH -v

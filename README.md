@@ -57,7 +57,7 @@ min-length=1
 This test checks if the tree can be built with a default configuration.
 
 ```bash
-./bootstrap-configure --enable-external-ell
+./bootstrap-configure
 make
 ```
 
@@ -66,3 +66,12 @@ Note that it uses `ell` as an external library.
 ### Make Check
 
 If the `checkbuild` passes, it run `make check`.
+
+### Check Build w/exteranl-ell
+
+This test uses exteranl ell configuration.
+
+```bash
+./bootstrap-configure --enable-external-ell
+make
+```
