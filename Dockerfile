@@ -5,4 +5,4 @@ COPY *.py /
 COPY *.ini /
 COPY gitlint /.gitlint
 
-CMD [ "/entrypoint.sh" ]
+ENTRYPOINT [ "/entrypoint.sh" ]
