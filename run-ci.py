@@ -804,7 +804,7 @@ def main():
 
     # Fetch commits in the tree for checkpath and gitlint
     logger.debug("Fetch %d commits in the tree" % github_pr.commits)
-    pr_commits = github_pr.commits
+    pr_commits = github_pr.commits + 1
     (ret, stdout, stderr) = run_cmd("git", "fetch", "--depth=%d" % pr_commits,
                                     cwd=src_dir)
     if ret:
