@@ -506,6 +506,8 @@ class CheckBuildSetup(CiBase):
         shutil.copytree(src_dir, src2_dir)
         logger.debug("Duplicate src_dir to src2_dir")
 
+        self.success()
+
 
 class CheckBuild(CiBase):
     name = "checkbuild"
