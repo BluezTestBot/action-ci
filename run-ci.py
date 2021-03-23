@@ -608,7 +608,7 @@ class CheckBuildExtEll(CiBase):
 
         # bootstrap-configure
         (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
-                                        "--enable-exteranl-ell",
+                                        "--enable-external-ell",
                                         cwd=src2_dir)
         if ret:
             self.add_failure(stderr)
