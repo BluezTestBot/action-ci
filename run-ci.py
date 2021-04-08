@@ -10,6 +10,8 @@ import re
 import smtplib
 import shutil
 import email.utils
+import pathlib
+import tarfile
 from enum import Enum
 from github import Github
 from email.mime.multipart import MIMEMultipart
@@ -584,6 +586,103 @@ class MakeCheck(CiBase):
         # At this point, consider test passed here
         self.success()
 
+
+class CheckMakeDist(CiBase):
+    name = "checkmakedist"
+    display_name = "Check Make Dist Build"
+
+    def config(self):
+        """
+        Configure the test cases
+        """
+        pass
+
+    def run(self):
+        logger.debug("##### Run CheckMakeDist Test #####")
+
+        self.enable = config_enable(config, self.name)
+
+        self.config()
+
+        # Check if it is disabled.
+        if self.enable == False:
+            self.skip("Disabled in configuration")
+
+        # Only run if "checkbuild" success
+        if test_suite["checkbuild"].verdict != Verdict.PASS:
+            logger.info("Checkbuild is not success. skip this test")
+            self.skip("checkbuild not success")
+            raise EndTest
+
+        # Actual test starts:
+
+        # 'make dist' that generates the tarball
+        (ret, stdout, stderr) = run_cmd("make", "dist", cwd=src_dir)
+        if ret:
+            self.add_failure(stderr)
+            return
+
+        # Find tarball
+        bluez_tarball_file = self.find_tarball(src_dir)
+        if bluez_tarball_file is None:
+            self.add_failure("Unable to find BlueZ tar file from: %s" % src_dir)
+            return
+
+        bluez_tarball_file_path = os.path.join(src_dir, bluez_tarball_file)
+        if not os.path.exists(bluez_tarball_file_path):
+            logger.error("Unable to find BlueZ tarball file from %s" %
+                                                        bluez_tarball_file_path)
+            self.add_failure("Unable to find BlueZ tarball file")
+            raise EndTest
+        logger.debug("BlueZ tarball file path: %s" % bluez_tarball_file_path)
+
+        # Extract tarball
+        tf = tarfile.open(bluez_tarball_file_path)
+        tf.extractall(path=src_dir)
+
+        # Remove .tar.xz from the file name
+        bluez_extract_folder = os.path.splitext(os.path.splitext(
+                                                    bluez_tarball_file)[0])[0]
+        bluez_extract_path = os.path.join(src_dir, bluez_extract_folder)
+        logger.debug("BlueZ tarball extracted to %s" % bluez_extract_path)
+
+
+        # Extra check
+        if not os.path.exists(os.path.join(bluez_extract_path, 'configure')):
+            logger.error("Unable to find configure file")
+            self.add_failure("Unable to find configure file")
+            raise EndTest
+
+        # Configure
+        (ret, stdout, stderr) = run_cmd("./configure", cwd=bluez_extract_path)
+        if ret:
+            self.add_failure(stderr)
+            raise EndTest
+
+        # make
+        (ret, stdout, stderr) = run_cmd("make", cwd=bluez_extract_path)
+        if ret:
+            self.add_failure(stderr)
+            raise EndTest
+
+        # At this point, consider test passed here
+        self.success()
+
+    def find_tarball(self, src_dir):
+        """
+        Find the bluez tarball from the src_dir and return full path, otherwise
+        return None
+        """
+        tarball_file = None
+
+        for fp in pathlib.Path(src_dir).rglob('bluez-*.tar.xz'):
+            if fp is not None:
+                tarball_file = fp
+                break
+
+        logger.debug("BlueZ tarball file: %s" % tarball_file)
+
+        return tarball_file
 
 class CheckBuildExtEll(CiBase):
     name = "checkbuild_extell"
