@@ -712,8 +712,8 @@ class MakeDist(CiBase):
 
 class BuildExtEll(CiBase):
     name = "build_extell"
-    display_name = "Build w/ext ELL"
-    desc = "Build BlueZ source with \'--enable-external-ell\' configuration"
+    display_name = "Build w/ext ELL - Configure"
+    desc = "Configure BlueZ source with \'--enable-external-ell\' configuration"
 
     def config(self):
         """
@@ -722,7 +722,7 @@ class BuildExtEll(CiBase):
         pass
 
     def run(self):
-        logger.debug("##### Run CheckBuild w/exteranl ell Test #####")
+        logger.debug("##### Run Build w/exteranl ell - configure Test #####")
         self.start_timer()
 
         self.enable = config_enable(config, self.name)
@@ -739,6 +739,39 @@ class BuildExtEll(CiBase):
                                         cwd=src2_dir)
         if ret:
             self.add_failure_end_test(stderr)
+
+        # At this point, consider test passed here
+        self.success()
+
+
+class BuildExtEllMake(CiBase):
+    name = "build_extell_make"
+    display_name = "Build w/ext ELL - Make"
+    desc = "Build BlueZ source with \'--enable-external-ell\' configuration"
+
+    def config(self):
+        """
+        Configure the test cases.
+        """
+        pass
+
+    def run(self):
+        logger.debug("##### Run Build w/exteranl ell - make Test #####")
+        self.start_timer()
+
+        self.enable = config_enable(config, 'build_extell')
+
+        self.config()
+
+        # Check if it is disabled.
+        if self.enable == False:
+            self.skip("Disabled in configuration")
+
+        # Only run if "build_extell" success
+        if test_suite["build_extell"].verdict != Verdict.PASS:
+            logger.info("build_extell test did not pass. skip this test")
+            self.skip("build_extell test did not pass")
+            raise EndTest
 
         # make
         (ret, stdout, stderr) = run_cmd("make", cwd=src2_dir)
