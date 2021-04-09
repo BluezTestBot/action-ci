@@ -543,8 +543,8 @@ class BuildPrep(CiBase):
 
 class Build(CiBase):
     name = "build"
-    display_name = "Build"
-    desc = "Configure and build the BlueZ source tree"
+    display_name = "Build - Configure"
+    desc = "Configure the BlueZ source tree"
 
     def config(self):
         """
@@ -569,6 +569,38 @@ class Build(CiBase):
                                         cwd=src_dir)
         if ret:
             self.add_failure_end_test(stderr)
+
+        # At this point, consider test passed here
+        self.success()
+
+
+class BuildMake(CiBase):
+    name = "buildmake"
+    display_name = "Build - Make"
+    desc = "Build the BlueZ source tree"
+
+    def config(self):
+        """
+        Configure the test cases.
+        """
+        pass
+
+    def run(self):
+        logger.debug("##### Run Build Make Test #####")
+        self.start_timer()
+
+        self.enable = config_enable(config, 'build')
+
+        self.config()
+
+        # Check if it is disabled.
+        if self.enable == False:
+            self.skip("Disabled in configuration")
+
+        # Only run if "checkbuild" success
+        if test_suite["build"].verdict != Verdict.PASS:
+            logger.info("build test did not pass. skip this test")
+            self.skip("build test did not pass")
 
         # make
         (ret, stdout, stderr) = run_cmd("make", cwd=src_dir)
@@ -606,7 +638,6 @@ class MakeCheck(CiBase):
         if test_suite["build"].verdict != Verdict.PASS:
             logger.info("build test is not success. skip this test")
             self.skip("build test is not success")
-            raise EndTest
 
         # Run make check. Assume the code is already configuared and problem
         # to build.
@@ -645,7 +676,6 @@ class MakeDist(CiBase):
         if test_suite["build"].verdict != Verdict.PASS:
             logger.info("build test is not success. skip this test")
             self.skip("build test is not success")
-            raise EndTest
 
         # Actual test starts:
 
@@ -771,7 +801,6 @@ class BuildExtEllMake(CiBase):
         if test_suite["build_extell"].verdict != Verdict.PASS:
             logger.info("build_extell test did not pass. skip this test")
             self.skip("build_extell test did not pass")
-            raise EndTest
 
         # make
         (ret, stdout, stderr) = run_cmd("make", cwd=src2_dir)
