@@ -12,6 +12,7 @@ import shutil
 import email.utils
 import pathlib
 import tarfile
+import time
 from enum import Enum
 from github import Github
 from email.mime.multipart import MIMEMultipart
@@ -286,21 +287,26 @@ class CiBase:
     display_name = None
     desc = None
     enable = True
+    start_time = 0
+    end_time = 0
 
     verdict = Verdict.PENDING
     output = ""
 
     def success(self):
+        self.end_timer()
         self.verdict = Verdict.PASS
 
     def error(self, msg):
         self.verdict = Verdict.ERROR
         self.output = msg
+        self.end_timer()
         raise EndTest
 
     def skip(self, msg):
         self.verdict = Verdict.SKIP
         self.output = msg
+        self.end_timer()
         raise EndTest
 
     def add_failure(self, msg):
@@ -312,7 +318,21 @@ class CiBase:
 
     def add_failure_end_test(self, msg):
         self.add_failure(msg)
+        self.end_timer()
         raise EndTest
+
+    def start_timer(self):
+        self.start_time = time.time()
+
+    def end_timer(self):
+        self.end_time = time.time()
+
+    def elapsed(self):
+        if self.start_time == 0:
+            return 0
+        if self.end_time == 0:
+            self.end_timer()
+        return self.end_time - self.start_time
 
 
 class CheckPatch(CiBase):
@@ -335,6 +355,7 @@ class CheckPatch(CiBase):
 
     def run(self):
         logger.debug("##### Run CheckPatch Test #####")
+        self.start_timer()
 
         self.enable = config_enable(config, self.name)
         self.config()
@@ -405,6 +426,7 @@ class CheckGitLint(CiBase):
 
     def run(self):
         logger.debug("##### Run CheckGitLint Test #####")
+        self.start_timer()
 
         self.enable = config_enable(config, self.name)
         self.config()
@@ -468,6 +490,7 @@ class CheckBuildSetup_ell(CiBase):
 
     def run(self):
         logger.debug("##### Run CheckBuild: Setup ELL #####")
+        self.start_timer()
 
         # Run only if CheckBuild is enabled
         self.enable = config_enable(config, "checkbuild")
@@ -507,6 +530,7 @@ class CheckBuildSetup(CiBase):
 
     def run(self):
         logger.debug("##### Run CheckBuild: Setup #####")
+        self.start_timer()
 
         self.config()
 
@@ -530,6 +554,7 @@ class CheckBuild(CiBase):
 
     def run(self):
         logger.debug("##### Run CheckBuild Test #####")
+        self.start_timer()
 
         self.enable = config_enable(config, self.name)
 
@@ -567,6 +592,7 @@ class MakeCheck(CiBase):
 
     def run(self):
         logger.debug("##### Run MakeCheck Test #####")
+        self.start_timer()
 
         self.enable = config_enable(config, self.name)
 
@@ -605,6 +631,7 @@ class CheckMakeDist(CiBase):
 
     def run(self):
         logger.debug("##### Run CheckMakeDist Test #####")
+        self.start_timer()
 
         self.enable = config_enable(config, self.name)
 
@@ -696,6 +723,7 @@ class CheckBuildExtEll(CiBase):
 
     def run(self):
         logger.debug("##### Run CheckBuild w/exteranl ell Test #####")
+        self.start_timer()
 
         self.enable = config_enable(config, self.name)
 
@@ -764,13 +792,13 @@ def run_ci(args):
     return num_fails
 
 TEST_REPORT_PASS = '''##############################
-Test: {} - PASS
+Test: {} - PASS - {} seconds
 Desc: {}
 
 '''
 
 TEST_REPORT_FAIL = '''##############################
-Test: {} - {}
+Test: {} - {} - {} seconds
 Desc: {}
 Output:
 {}
@@ -786,13 +814,13 @@ def report_ci():
 
     for test_name, test in test_suite.items():
         if test.verdict == Verdict.PASS:
-            results += TEST_REPORT_PASS.format(test.display_name, test.desc)
+            results += TEST_REPORT_PASS.format(test.display_name,  test.elapsed, test.desc)
         if test.verdict == Verdict.FAIL:
-            results += TEST_REPORT_FAIL.format(test.display_name, "FAIL", test.desc, test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name, "FAIL", test.elapsed, test.desc, test.output)
         if test.verdict == Verdict.ERROR:
-            results += TEST_REPORT_FAIL.format(test.display_name, "ERROR", test.desc, test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name, "ERROR", test.elapsed, test.desc, test.output)
         if test.verdict == Verdict.SKIP:
-            results += TEST_REPORT_FAIL.format(test.display_name, "SKIPPED", test.desc, test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name, "SKIPPED", test.elapsed, test.desc, test.output)
 
     body = EMAIL_MESSAGE.format(pw_series["web_url"], results)
 
