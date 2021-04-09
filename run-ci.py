@@ -310,6 +310,10 @@ class CiBase:
         else:
             self.output += "\n" + msg
 
+    def add_failure_end_test(self, msg):
+        self.add_failure(msg)
+        raise EndTest
+
 
 class CheckPatch(CiBase):
     name = "checkpatch"
@@ -475,20 +479,17 @@ class CheckBuildSetup_ell(CiBase):
         # bootstrap-configure
         (ret, stdout, stderr) = run_cmd("./bootstrap-configure", cwd=ell_dir)
         if ret:
-            self.add_failure(stderr)
-            raise EndTest
+            self.add_failure_end_test(stderr)
 
         # make
         (ret, stdout, stderr) = run_cmd("make", cwd=ell_dir)
         if ret:
-            self.add_failure(stderr)
-            raise EndTest
+            self.add_failure_end_test(stderr)
 
         # install
         (ret, stdout, stderr) = run_cmd("make", "install", cwd=ell_dir)
         if ret:
-            self.add_failure(stderr)
-            raise EndTest
+            self.add_failure_end_test(stderr)
 
         self.success()
 
@@ -542,14 +543,12 @@ class CheckBuild(CiBase):
         (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
                                         cwd=src_dir)
         if ret:
-            self.add_failure(stderr)
-            raise EndTest
+            self.add_failure_end_test(stderr)
 
         # make
         (ret, stdout, stderr) = run_cmd("make", cwd=src_dir)
         if ret:
-            self.add_failure(stderr)
-            raise EndTest
+            self.add_failure_end_test(stderr)
 
         # At this point, consider test passed here
         self.success()
@@ -587,8 +586,7 @@ class MakeCheck(CiBase):
         # to build.
         (ret, stdout, stderr) = run_cmd("make", "check", cwd=src_dir)
         if ret:
-            self.add_failure(stderr)
-            return
+            self.add_failure_end_test(stderr)
 
         # At this point, consider test passed here
         self.success()
@@ -627,21 +625,18 @@ class CheckMakeDist(CiBase):
         # 'make dist' that generates the tarball
         (ret, stdout, stderr) = run_cmd("make", "dist", cwd=src_dir)
         if ret:
-            self.add_failure(stderr)
-            return
+            self.add_failure_end_test(stderr)
 
         # Find tarball
         bluez_tarball_file = self.find_tarball(src_dir)
         if bluez_tarball_file is None:
-            self.add_failure("Unable to find BlueZ tar file from: %s" % src_dir)
-            return
+            self.add_failure_end_test("Unable to find tarball: %s" % src_dir)
 
         bluez_tarball_file_path = os.path.join(src_dir, bluez_tarball_file)
         if not os.path.exists(bluez_tarball_file_path):
-            logger.error("Unable to find BlueZ tarball file from %s" %
+            logger.error("Unable to find BlueZ tarball: %s" %
                                                         bluez_tarball_file_path)
-            self.add_failure("Unable to find BlueZ tarball file")
-            raise EndTest
+            self.add_failure_end_test("Unable to find BlueZ tarball file")
         logger.debug("BlueZ tarball file path: %s" % bluez_tarball_file_path)
 
         # Extract tarball
@@ -654,24 +649,20 @@ class CheckMakeDist(CiBase):
         bluez_extract_path = os.path.join(src_dir, bluez_extract_folder)
         logger.debug("BlueZ tarball extracted to %s" % bluez_extract_path)
 
-
         # Extra check
         if not os.path.exists(os.path.join(bluez_extract_path, 'configure')):
             logger.error("Unable to find configure file")
-            self.add_failure("Unable to find configure file")
-            raise EndTest
+            self.add_failure_end_test("Unable to find configure file")
 
         # Configure
         (ret, stdout, stderr) = run_cmd("./configure", cwd=bluez_extract_path)
         if ret:
-            self.add_failure(stderr)
-            raise EndTest
+            self.add_failure_end_test(stderr)
 
         # make
         (ret, stdout, stderr) = run_cmd("make", cwd=bluez_extract_path)
         if ret:
-            self.add_failure(stderr)
-            raise EndTest
+            self.add_failure_end_test(stderr)
 
         # At this point, consider test passed here
         self.success()
@@ -719,14 +710,12 @@ class CheckBuildExtEll(CiBase):
                                         "--enable-external-ell",
                                         cwd=src2_dir)
         if ret:
-            self.add_failure(stderr)
-            raise EndTest
+            self.add_failure_end_test(stderr)
 
         # make
         (ret, stdout, stderr) = run_cmd("make", cwd=src2_dir)
         if ret:
-            self.add_failure(stderr)
-            raise EndTest
+            self.add_failure_end_test(stderr)
 
         # At this point, consider test passed here
         self.success()
