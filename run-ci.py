@@ -106,7 +106,7 @@ GITHUB_COMMENT = '''**{display_name}**
 Test ID: {name}
 Desc: {desc}
 Duration: {elapsed:.2f} seconds
-**Result: {status:<25}**
+**Result: {status}**
 
 
 '''
