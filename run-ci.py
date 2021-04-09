@@ -284,6 +284,7 @@ class CiBase:
     """
     name = None
     display_name = None
+    desc = None
     enable = True
 
     verdict = Verdict.PENDING
@@ -313,6 +314,7 @@ class CiBase:
 class CheckPatch(CiBase):
     name = "checkpatch"
     display_name = "CheckPatch"
+    desc = "Run checkpatch.pl script with rule in .checkpatch.conf"
 
     checkpatch_pl = '/usr/bin/checkpatch.pl'
 
@@ -381,7 +383,8 @@ class CheckPatch(CiBase):
 
 class CheckGitLint(CiBase):
     name = "checkgitlint"
-    display_name = "CheckGitLint"
+    display_name = "GitLint"
+    desc = "Run gitlint with rule in .gitlint"
 
     gitlint_config = '/.gitlint'
 
@@ -450,7 +453,8 @@ class CheckGitLint(CiBase):
 
 class CheckBuildSetup_ell(CiBase):
     name = "checkbuildsetupell"
-    display_name = "CheckBuild: Setup ELL"
+    display_name = "Setup ELL"
+    desc = "Clone, build, and install ELL"
 
     def config(self):
         """
@@ -491,7 +495,8 @@ class CheckBuildSetup_ell(CiBase):
 
 class CheckBuildSetup(CiBase):
     name = "checkbuildsetup"
-    display_name = "CheckBuild: Setup"
+    display_name = "Build - Prep"
+    desc = "Prepare environment for build"
 
     def config(self):
         """
@@ -513,7 +518,8 @@ class CheckBuildSetup(CiBase):
 
 class CheckBuild(CiBase):
     name = "checkbuild"
-    display_name = "CheckBuild"
+    display_name = "Build"
+    desc = "Configure and build the BlueZ source tree"
 
     def config(self):
         """
@@ -551,7 +557,8 @@ class CheckBuild(CiBase):
 
 class MakeCheck(CiBase):
     name = "makecheck"
-    display_name = "MakeCheck"
+    display_name = "Make Check"
+    desc = "Run \'make check\'"
 
     def config(self):
         """
@@ -589,7 +596,8 @@ class MakeCheck(CiBase):
 
 class CheckMakeDist(CiBase):
     name = "checkmakedist"
-    display_name = "Check Make Dist Build"
+    display_name = "Make Dist"
+    desc = "Run \'make dist\' and build the distribution tarball"
 
     def config(self):
         """
@@ -686,7 +694,8 @@ class CheckMakeDist(CiBase):
 
 class CheckBuildExtEll(CiBase):
     name = "checkbuild_extell"
-    display_name = "CheckBuild w/external ell"
+    display_name = "Build w/ext ELL"
+    desc = "Build BlueZ source with \'--enable-external-ell\' configuration"
 
     def config(self):
         """
@@ -767,11 +776,13 @@ def run_ci(args):
 
 TEST_REPORT_PASS = '''##############################
 Test: {} - PASS
+Desc: {}
 
 '''
 
 TEST_REPORT_FAIL = '''##############################
 Test: {} - {}
+Desc: {}
 Output:
 {}
 
@@ -786,13 +797,13 @@ def report_ci():
 
     for test_name, test in test_suite.items():
         if test.verdict == Verdict.PASS:
-            results += TEST_REPORT_PASS.format(test.display_name)
+            results += TEST_REPORT_PASS.format(test.display_name, test.desc)
         if test.verdict == Verdict.FAIL:
-            results += TEST_REPORT_FAIL.format(test.display_name, "FAIL", test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name, "FAIL", test.desc, test.output)
         if test.verdict == Verdict.ERROR:
-            results += TEST_REPORT_FAIL.format(test.display_name, "ERROR", test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name, "ERROR", test.desc, test.output)
         if test.verdict == Verdict.SKIP:
-            results += TEST_REPORT_FAIL.format(test.display_name, "SKIPPED", test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name, "SKIPPED", test.desc, test.output)
 
     body = EMAIL_MESSAGE.format(pw_series["web_url"], results)
 
