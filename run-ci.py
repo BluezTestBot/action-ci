@@ -406,8 +406,8 @@ class CheckPatch(CiBase):
         return output
 
 
-class CheckGitLint(CiBase):
-    name = "checkgitlint"
+class GitLint(CiBase):
+    name = "gitlint"
     display_name = "GitLint"
     desc = "Run gitlint with rule in .gitlint"
 
@@ -425,7 +425,7 @@ class CheckGitLint(CiBase):
         logger.debug("gitlint_config = %s" % self.gitlint_config)
 
     def run(self):
-        logger.debug("##### Run CheckGitLint Test #####")
+        logger.debug("##### Run Gitlint Test #####")
         self.start_timer()
 
         self.enable = config_enable(config, self.name)
@@ -441,7 +441,7 @@ class CheckGitLint(CiBase):
                 logger.info("Skip workflow patch")
                 continue
 
-            output = self.run_checkgitlint(commit.sha)
+            output = self.run_gitlint(commit.sha)
             if output != None:
                 msg = "{}\n{}".format(commit.commit.message.splitlines()[0],
                                       output)
@@ -450,7 +450,7 @@ class CheckGitLint(CiBase):
         if self.verdict != Verdict.FAIL:
             self.success()
 
-    def run_checkgitlint(self, sha):
+    def run_gitlint(self, sha):
         """
         Run checkpatch script with commit sha.
         On success, it returns None.
@@ -477,9 +477,9 @@ class CheckGitLint(CiBase):
         return output
 
 
-class CheckBuildSetup_ell(CiBase):
-    name = "checkbuildsetupell"
-    display_name = "Setup ELL"
+class BuildSetup_ell(CiBase):
+    name = "setupell"
+    display_name = "Prep - Setup ELL"
     desc = "Clone, build, and install ELL"
 
     def config(self):
@@ -489,13 +489,13 @@ class CheckBuildSetup_ell(CiBase):
         pass
 
     def run(self):
-        logger.debug("##### Run CheckBuild: Setup ELL #####")
+        logger.debug("##### Run Build: Setup ELL #####")
         self.start_timer()
 
-        # Run only if CheckBuild is enabled
-        self.enable = config_enable(config, "checkbuild")
+        # Run only if build is enabled
+        self.enable = config_enable(config, "build")
         if self.enable == False:
-            self.skip("CheckBuild is disabled")
+            self.skip("Build is disabled")
 
         self.config()
 
@@ -517,8 +517,8 @@ class CheckBuildSetup_ell(CiBase):
         self.success()
 
 
-class CheckBuildSetup(CiBase):
-    name = "checkbuildsetup"
+class BuildPrep(CiBase):
+    name = "buildprep"
     display_name = "Build - Prep"
     desc = "Prepare environment for build"
 
@@ -529,7 +529,7 @@ class CheckBuildSetup(CiBase):
         pass
 
     def run(self):
-        logger.debug("##### Run CheckBuild: Setup #####")
+        logger.debug("##### Run Build: Prep #####")
         self.start_timer()
 
         self.config()
@@ -541,8 +541,8 @@ class CheckBuildSetup(CiBase):
         self.success()
 
 
-class CheckBuild(CiBase):
-    name = "checkbuild"
+class Build(CiBase):
+    name = "build"
     display_name = "Build"
     desc = "Configure and build the BlueZ source tree"
 
@@ -553,7 +553,7 @@ class CheckBuild(CiBase):
         pass
 
     def run(self):
-        logger.debug("##### Run CheckBuild Test #####")
+        logger.debug("##### Run Build Test #####")
         self.start_timer()
 
         self.enable = config_enable(config, self.name)
@@ -603,9 +603,9 @@ class MakeCheck(CiBase):
             self.skip("Disabled in configuration")
 
         # Only run if "checkbuild" success
-        if test_suite["checkbuild"].verdict != Verdict.PASS:
-            logger.info("Checkbuild is not success. skip this test")
-            self.skip("checkbuild not success")
+        if test_suite["build"].verdict != Verdict.PASS:
+            logger.info("build test is not success. skip this test")
+            self.skip("build test is not success")
             raise EndTest
 
         # Run make check. Assume the code is already configuared and problem
@@ -618,8 +618,8 @@ class MakeCheck(CiBase):
         self.success()
 
 
-class CheckMakeDist(CiBase):
-    name = "checkmakedist"
+class MakeDist(CiBase):
+    name = "makedist"
     display_name = "Make Dist"
     desc = "Run \'make dist\' and build the distribution tarball"
 
@@ -630,7 +630,7 @@ class CheckMakeDist(CiBase):
         pass
 
     def run(self):
-        logger.debug("##### Run CheckMakeDist Test #####")
+        logger.debug("##### Run MakeDist Test #####")
         self.start_timer()
 
         self.enable = config_enable(config, self.name)
@@ -642,9 +642,9 @@ class CheckMakeDist(CiBase):
             self.skip("Disabled in configuration")
 
         # Only run if "checkbuild" success
-        if test_suite["checkbuild"].verdict != Verdict.PASS:
-            logger.info("Checkbuild is not success. skip this test")
-            self.skip("checkbuild not success")
+        if test_suite["build"].verdict != Verdict.PASS:
+            logger.info("build test is not success. skip this test")
+            self.skip("build test is not success")
             raise EndTest
 
         # Actual test starts:
@@ -710,8 +710,8 @@ class CheckMakeDist(CiBase):
 
         return tarball_file
 
-class CheckBuildExtEll(CiBase):
-    name = "checkbuild_extell"
+class BuildExtEll(CiBase):
+    name = "build_extell"
     display_name = "Build w/ext ELL"
     desc = "Build BlueZ source with \'--enable-external-ell\' configuration"
 
