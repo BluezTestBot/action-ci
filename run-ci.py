@@ -792,13 +792,13 @@ def run_ci(args):
     return num_fails
 
 TEST_REPORT_PASS = '''##############################
-Test: {} - PASS - {} seconds
+Test: {} - PASS - {:.2f} seconds
 Desc: {}
 
 '''
 
 TEST_REPORT_FAIL = '''##############################
-Test: {} - {} - {} seconds
+Test: {} - {} - {:.2f} seconds
 Desc: {}
 Output:
 {}
@@ -814,13 +814,27 @@ def report_ci():
 
     for test_name, test in test_suite.items():
         if test.verdict == Verdict.PASS:
-            results += TEST_REPORT_PASS.format(test.display_name,  test.elapsed(), test.desc)
+            results += TEST_REPORT_PASS.format(test.display_name,
+                                               test.elapsed(),
+                                               test.desc)
         if test.verdict == Verdict.FAIL:
-            results += TEST_REPORT_FAIL.format(test.display_name, "FAIL", test.elapsed(), test.desc, test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name,
+                                               "FAIL",
+                                               test.elapsed(),
+                                               test.desc,
+                                               test.output)
         if test.verdict == Verdict.ERROR:
-            results += TEST_REPORT_FAIL.format(test.display_name, "ERROR", test.elapsed(), test.desc, test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name,
+                                               "ERROR",
+                                               test.elapsed(),
+                                               test.desc,
+                                               test.output)
         if test.verdict == Verdict.SKIP:
-            results += TEST_REPORT_FAIL.format(test.display_name, "SKIPPED", test.elapsed(), test.desc, test.output)
+            results += TEST_REPORT_FAIL.format(test.display_name,
+                                               "SKIPPED",
+                                               test.elapsed(),
+                                               test.desc,
+                                               test.output)
 
     body = EMAIL_MESSAGE.format(pw_series["web_url"], results)
 
