@@ -38,7 +38,7 @@ This test runs the [checkpatch.pl](https://github.com/torvalds/linux/blob/master
 --ignore COMMIT_MESSAGE
 ```
 
-### Check gitlint
+### gitlint
 
 This test runs `gitlint` and its configuration is in [gitlint](./gitlint) file.
 
@@ -52,7 +52,7 @@ line-length=72
 min-length=1
 ```
 
-### Check Build
+### Build
 
 This test checks if the tree can be built with a default configuration.
 
@@ -65,7 +65,7 @@ Note that it uses `ell` as an external library.
 
 ### Make Check
 
-If the `checkbuild` passes, it run `make check`.
+If the `build` passes, it run `make check`.
 
 ### Check Build w/exteranl-ell
 
