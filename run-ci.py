@@ -805,7 +805,7 @@ Output:
 
 '''
 
-ONELINE_RESULT = '''{test:<30}{result:<10}{elapsed:.2f}\n'''
+ONELINE_RESULT = '''{test:<30}{result:<10}{elapsed:.2f} seconds\n'''
 
 def report_ci():
     """
