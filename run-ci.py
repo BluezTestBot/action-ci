@@ -792,51 +792,62 @@ def run_ci(args):
     return num_fails
 
 TEST_REPORT_PASS = '''##############################
-Test: {} - PASS - {:.2f} seconds
+Test: {} - PASS
 Desc: {}
 
 '''
 
 TEST_REPORT_FAIL = '''##############################
-Test: {} - {} - {:.2f} seconds
+Test: {} - {}
 Desc: {}
 Output:
 {}
 
 '''
 
+ONELINE_RESULT = '''{test:<30}{result:<10}{elapsed:.2f}\n'''
+
 def report_ci():
     """
     Generate CI result report and send email
     """
 
-    results = ""
+    results = "Details\n"
+    summary = "Test Summary:\n"
 
     for test_name, test in test_suite.items():
         if test.verdict == Verdict.PASS:
             results += TEST_REPORT_PASS.format(test.display_name,
-                                               test.elapsed(),
                                                test.desc)
+            summary += ONELINE_RESULT.format(test=test.display_name,
+                                             result='PASS',
+                                             elapsed=test.elapsed())
         if test.verdict == Verdict.FAIL:
             results += TEST_REPORT_FAIL.format(test.display_name,
                                                "FAIL",
-                                               test.elapsed(),
                                                test.desc,
                                                test.output)
+            summary += ONELINE_RESULT.format(test=test.display_name,
+                                             result='FAIL',
+                                             elapsed=test.elapsed())
         if test.verdict == Verdict.ERROR:
             results += TEST_REPORT_FAIL.format(test.display_name,
                                                "ERROR",
-                                               test.elapsed(),
                                                test.desc,
                                                test.output)
+            summary += ONELINE_RESULT.format(test=test.display_name,
+                                             result='ERROR',
+                                             elapsed=test.elapsed())
         if test.verdict == Verdict.SKIP:
             results += TEST_REPORT_FAIL.format(test.display_name,
                                                "SKIPPED",
-                                               test.elapsed(),
                                                test.desc,
                                                test.output)
+            summary += ONELINE_RESULT.format(test=test.display_name,
+                                             result='ERROR',
+                                             elapsed=test.elapsed())
 
-    body = EMAIL_MESSAGE.format(pw_series["web_url"], results)
+    body = EMAIL_MESSAGE.format(pw_series["web_url"], summary + '\n' + results)
 
     patch = pw_series['patches'][0]
 
