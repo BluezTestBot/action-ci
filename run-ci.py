@@ -33,7 +33,6 @@ base_dir = None
 src_dir = None
 src2_dir = None
 ell_dir = None
-dist_dir = None
 
 test_suite = {}
 
@@ -667,10 +666,10 @@ class MakeCheck(CiBase):
         self.success()
 
 
-class MakeDist(CiBase):
-    name = "makedist"
-    display_name = "Make Dist"
-    desc = "Run \'make dist\' and build the distribution tarball"
+class MakeDistcheck(CiBase):
+    name = "makedistcheck"
+    display_name = "Make Distcheck"
+    desc = "Run distcheck to check the distribution"
 
     def config(self):
         """
@@ -679,160 +678,27 @@ class MakeDist(CiBase):
         pass
 
     def run(self):
-        logger.debug("##### Run MakeDist Test #####")
-
-        global dist_dir
-
+        logger.debug("##### Run Make Distcheck Test #####")
         self.start_timer()
 
-        self.enable = config_enable(config, self.name)
+        self.enable = config_enable(config, 'makedistcheck')
 
         self.config()
 
         # Check if it is disabled.
         if self.enable == False:
             self.skip("Disabled in configuration")
-
-        # Only run if "checkbuild" success
-        if test_suite["build"].verdict != Verdict.PASS:
-            logger.info("build test is not success. skip this test")
-            self.skip("build test is not success")
-
-        # Actual test starts:
-
-        # 'make dist' that generates the tarball
-        (ret, stdout, stderr) = run_cmd("make", "dist", cwd=src_dir)
-        if ret:
-            self.add_failure_end_test(stderr)
-
-        # Find tarball
-        bluez_tarball_file = self.find_tarball(src_dir)
-        if bluez_tarball_file is None:
-            self.add_failure_end_test("Unable to find tarball: %s" % src_dir)
-
-        bluez_tarball_file_path = os.path.join(src_dir, bluez_tarball_file)
-        if not os.path.exists(bluez_tarball_file_path):
-            logger.error("Unable to find BlueZ tarball: %s" %
-                                                        bluez_tarball_file_path)
-            self.add_failure_end_test("Unable to find BlueZ tarball file")
-        logger.debug("BlueZ tarball file path: %s" % bluez_tarball_file_path)
-
-        # Extract tarball
-        tf = tarfile.open(bluez_tarball_file_path)
-        tf.extractall(path=src_dir)
-
-        # Remove .tar.xz from the file name
-        bluez_extract_folder = os.path.splitext(os.path.splitext(
-                                                    bluez_tarball_file)[0])[0]
-        dist_dir = os.path.join(src_dir, bluez_extract_folder)
-        logger.debug("BlueZ tarball extracted to %s" % dist_dir)
-
-        # Extra check
-        if not os.path.exists(os.path.join(dist_dir, 'configure')):
-            logger.error("Unable to find configure file")
-            self.add_failure_end_test("Unable to find configure file")
-
-        # At this point, consider test passed here
-        self.success()
-
-    def find_tarball(self, src_dir):
-        """
-        Find the bluez tarball from the src_dir and return full path, otherwise
-        return None
-        """
-        tarball_file = None
-
-        for fp in pathlib.Path(src_dir).rglob('bluez-*.tar.xz'):
-            if fp is not None:
-                tarball_file = fp
-                break
-
-        logger.debug("BlueZ tarball file: %s" % tarball_file)
-
-        return tarball_file
-
-
-class MakeDistConfig(CiBase):
-    name = "makedistconfig"
-    display_name = "Make Dist - Configure"
-    desc = "Configure the source from distribution tarball"
-
-    def config(self):
-        """
-        Configure the test cases
-        """
-        pass
-
-    def run(self):
-        logger.debug("##### Run MakeDist Configure Test #####")
-        self.start_timer()
-
-        self.enable = config_enable(config, 'makedist')
-
-        self.config()
-
-        # Check if it is disabled.
-        if self.enable == False:
-            self.skip("Disabled in configuration")
-
-        # Only run if "build_extell" success
-        if test_suite["makedist"].verdict != Verdict.PASS:
-            logger.info("makedist test did not pass. skip this test")
-            self.skip("makedist test did not pass")
-
-        # Only run if "checkbuild" success
-        if test_suite["build"].verdict != Verdict.PASS:
-            logger.info("build test is not success. skip this test")
-            self.skip("build test is not success")
 
         # Actual test starts:
 
         # Configure
-        (ret, stdout, stderr) = run_cmd("./configure", cwd=dist_dir)
+        (ret, stdout, stderr) = run_cmd("./bootstrap-configure", cwd=src_dir)
         if ret:
             self.add_failure_end_test(stderr)
 
-        # At this point, consider test passed here
-        self.success()
-
-
-class MakeDistMake(CiBase):
-    name = "makedistmake"
-    display_name = "Make Dist - Make"
-    desc = "Build the source from distribution tarball"
-
-    def config(self):
-        """
-        Configure the test cases
-        """
-        pass
-
-    def run(self):
-        logger.debug("##### Run MakeDist Make Test #####")
-        self.start_timer()
-
-        self.enable = config_enable(config, 'makedist')
-
-        self.config()
-
-        # Check if it is disabled.
-        if self.enable == False:
-            self.skip("Disabled in configuration")
-
-        # Only run if "build_extell" success
-        if test_suite["makedist"].verdict != Verdict.PASS:
-            logger.info("makedist test did not pass. skip this test")
-            self.skip("makedist test did not pass")
-
-        # Only run if "checkbuild" success
-        if test_suite["build"].verdict != Verdict.PASS:
-            logger.info("build test is not success. skip this test")
-            self.skip("build test is not success")
-
-        # Actual test starts:
-
-        # make
-        (ret, stdout, stderr) = run_cmd("make", cwd=dist_dir)
+        # Make distcheck
+        (ret, stdout, stderr) = run_cmd("fakeroot", "make", "distcheck",
+                                        cwd=src_dir)
         if ret:
             self.add_failure_end_test(stderr)
 
