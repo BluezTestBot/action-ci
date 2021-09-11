@@ -28,6 +28,7 @@ github_commits = None
 
 pw_sid = None
 pw_series = None
+pw_series_patch_1 = None
 
 base_dir = None
 src_dir = None
@@ -65,6 +66,15 @@ def requests_url(url):
 
     return resp
 
+def requests_post(url, headers, content):
+    """ Helper function to post data to URL """
+
+    resp = requests.post(url, content, headers=headers)
+    if resp.status_code != 201:
+        raise requests.HTTPError("POST {}".format(resp.status_code))
+
+    return resp
+
 def patchwork_get_series(sid):
     """ Get series detail from patchwork """
 
@@ -72,6 +82,32 @@ def patchwork_get_series(sid):
     req = requests_url(url)
 
     return req.json()
+
+def patchwork_get_patch(patch_id: str):
+    """ Get patch detsil from patchwork """
+
+    url = PW_BASE_URL + "/patches/" + patch_id
+    req = requests_url(url)
+
+    return req.json()
+
+def patchwork_save_patch(patch, filename):
+    """ Save patch to file and return the file path """
+
+    patch_mbox = requests_url(patch["mbox"])
+
+    with open(filename, "wb") as file:
+        file.write(patch_mbox.content)
+
+    return filename
+
+def patchwork_save_patch_msg(patch, filename):
+    """ Save patch commit message to file and return the file path """
+
+    with open(filename, "wb") as file:
+        file.write(bytes(patch['content'], 'utf-8'))
+
+    return filename
 
 def patchwork_get_sid(pr_title):
     """
@@ -100,6 +136,32 @@ def patchwork_get_patch_detail_title(title):
         logger.debug("No matching patch title found")
 
     logger.error("Cannot find a matching patch from PatchWork series")
+
+def patchwork_post_checks(url, state, target_url, context, description):
+    """
+    Post checks(test results) to the patchwork site(url)
+    """
+
+    logger.debug("URL: %s" % url)
+
+    headers = {}
+    if 'PATCHWORK_TOKEN' in os.environ:
+        token = os.environ['PATCHWORK_TOKEN']
+        headers['Authorization'] = f'Token {token}'
+
+    content = {
+        'user': 104215,
+        'state': state,
+        'target_url': target_url,
+        'context': context,
+        'description': description
+    }
+
+    logger.debug("Content: %s" % content)
+
+    req = requests_post(url, headers, content)
+
+    return req.json()
 
 GITHUB_COMMENT = '''**{display_name}**
 Test ID: {name}
@@ -175,6 +237,21 @@ def config_enable(config, name):
 
     logger.info("config." + name + " is enabled")
     return True
+
+def config_submit_pw(config, name):
+    """
+    Check "submit_pw" in config[name]
+    Return True if it is specified and value is "yes"
+    """
+
+    if name in config:
+        if 'submit_pw' in config[name]:
+            if config[name]['submit_pw'] == 'yes':
+                logger.info("config." + name + ".submit_pw is enabled")
+                return True
+
+    logger.info("config." + name + ".submit_pw is disabled")
+    return False
 
 def send_email(sender, receiver, msg):
     """ Send email """
@@ -294,6 +371,21 @@ class Verdict(Enum):
     FAIL = 2
     ERROR = 3
     SKIP = 4
+    WARNING = 5
+
+
+def patchwork_state(verdict):
+    """
+    Convert verdict to patchwork state
+    """
+    if verdict == Verdict.PASS:
+        return 1
+    if verdict == Verdict.WARNING:
+        return 2
+    if verdict == Verdict.FAIL:
+        return 3
+
+    return 0
 
 
 class CiBase:
@@ -306,6 +398,7 @@ class CiBase:
     enable = True
     start_time = 0
     end_time = 0
+    submit_pw = False
 
     verdict = Verdict.PENDING
     output = ""
@@ -351,12 +444,34 @@ class CiBase:
             self.end_timer()
         return self.end_time - self.start_time
 
+    def submit_result(self, patch, verdict, description, url=None, name=None):
+        """
+        Submit the result to Patchwork
+        """
+
+        if self.submit_pw == False:
+            logger.info("Submitting PW is disabled. Skipped")
+            return
+
+        if url == None:
+            url = github_pr.html_url
+
+        if name == None:
+            name = self.name
+
+        logger.debug("Submitting the result to Patchwork")
+        pw_output = patchwork_post_checks(patch['checks'],
+                                          patchwork_state(verdict),
+                                          url,
+                                          name,
+                                          description)
+        logger.debug("Submit result\n%s" % pw_output)
+
 
 class CheckPatch(CiBase):
     name = "checkpatch"
     display_name = "CheckPatch"
     desc = "Run checkpatch.pl script with rule in .checkpatch.conf"
-
     checkpatch_pl = '/usr/bin/checkpatch.pl'
 
     def config(self):
@@ -365,62 +480,92 @@ class CheckPatch(CiBase):
         """
         logger.debug("Parser configuration")
 
+        self.enable = config_enable(config, self.name)
+        self.submit_pw = config_submit_pw(config, self.name)
+
         if self.name in config:
             if 'bin_path' in config[self.name]:
                 self.checkpatch_pl = config[self.name]['bin_path']
-        logger.debug("checkpatch_pl = %s" % self.checkpatch_pl)
+
+            logger.debug("checkpatch_pl = %s" % self.checkpatch_pl)
 
     def run(self):
         logger.debug("##### Run CheckPatch Test #####")
         self.start_timer()
 
-        self.enable = config_enable(config, self.name)
         self.config()
 
         # Check if it is disabled.
         if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "CheckPatch SKIP(Disabled)")
             self.skip("Disabled in configuration")
 
-        for commit in github_commits:
-            # Skip test if the patch is workflow path
-            if is_workflow_patch(commit):
-                logger.info("Skip workflow patch")
+        # Use patches from patchwork
+        for patch_item in pw_series['patches']:
+            logger.debug("patch id: %s" % patch_item['id'])
+
+            patch = patchwork_get_patch(str(patch_item["id"]))
+
+            # Run checkpatch
+            (output, error) = self.run_checkpatch(patch)
+
+            # Failed / Warning
+            if error != None:
+                msg = "{}\n{}".format(patch['name'], error)
+                if error.find("WARNING:") != -1:
+                    if error.find("ERROR:") != -1:
+                        self.submit_result(patch, Verdict.FAIL, msg)
+                    else:
+                        self.submit_result(patch, Verdict.WARNING, msg)
+                else:
+                    self.submit_result(patch, Verdict.FAIL, msg)
+
+                self.add_failure(msg)
                 continue
 
-            output = self.run_checkpatch(commit.sha)
-            if output != None:
-                msg = "{}\n{}".format(commit.commit.message.splitlines()[0],
-                                      output)
-                self.add_failure(msg)
+            # Warning in output
+            if output.find("WARNING:") != -1:
+                self.submit_result(patch, Verdict.WARNING, output)
+                continue
 
+            # Success
+            self.submit_result(patch, Verdict.PASS, "Checkpatch PASS")
+
+        # Overall status
         if self.verdict != Verdict.FAIL:
             self.success()
 
-    def run_checkpatch(self, sha):
+    def run_checkpatch(self, patch):
         """
-        Run checkpatch script with commit sha.
+        Run checkpatch script with patch from the patchwork.
+        It saves to file first and run checkpatch with the saved patch file.
+
         On success, it returns None.
         On failure, it returns the stderr output string
         """
 
         output = None
-        logger.info("Commit SHA: %s" % sha)
+        error = None
 
-        diff = subprocess.Popen(('git', 'show', '--format=email', sha),
-                                stdout=subprocess.PIPE,
-                                cwd=src_dir)
+        # Save the patch content to file
+        filename = os.path.join(src_dir, str(patch['id']) + ".patch")
+        logger.debug("Save patch: %s" % filename)
+        patch_file = patchwork_save_patch(patch, filename)
+
         try:
-            subprocess.check_output((self.checkpatch_pl, '--no-tree', '-'),
-                                    stdin=diff.stdout,
+            output = subprocess.check_output((self.checkpatch_pl, '--no-tree',
+                                                                patch_file),
                                     stderr=subprocess.STDOUT,
-                                    shell=True,
                                     cwd=src_dir)
-        except subprocess.CalledProcessError as ex:
-            output = ex.output.decode("utf-8")
-            logger.error("checkpatch returned error/warning")
-            logger.error("output: %s" % output)
+            output = output.decode("utf-8")
 
-        return output
+        except subprocess.CalledProcessError as ex:
+            error = ex.output.decode("utf-8")
+            logger.error("checkpatch.pl returned with error")
+            logger.error("output: %s" % error)
+
+        return (output, error)
 
 
 class GitLint(CiBase):
@@ -436,55 +581,70 @@ class GitLint(CiBase):
         """
         logger.debug("Parser configuration")
 
+        self.enable = config_enable(config, self.name)
+        self.submit_pw = config_submit_pw(config, self.name)
+
         if self.name in config:
             if 'config_path' in config[self.name]:
                 self.gitlint_config = config[self.name]['config_path']
-        logger.debug("gitlint_config = %s" % self.gitlint_config)
+
+            logger.debug("gitlint_config = %s" % self.gitlint_config)
 
     def run(self):
-        logger.debug("##### Run Gitlint Test #####")
+        logger.debug("##### Run Gitlint v2 Test #####")
         self.start_timer()
 
-        self.enable = config_enable(config, self.name)
         self.config()
 
         # Check if it is disabled.
         if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Gitlink SKIP(Disabled)")
             self.skip("Disabled in configuration")
 
-        for commit in github_commits:
-            # Skip test if the patch is workflow path
-            if is_workflow_patch(commit):
-                logger.info("Skip workflow patch")
+        # Use patches from patchwork
+        for patch_item in pw_series['patches']:
+            logger.debug("patch_id: %s" % patch_item['id'])
+
+            patch = patchwork_get_patch(str(patch_item['id']))
+
+            # Run gitlint
+            output = self.run_gitlint(patch)
+
+            # Failed
+            if output != None:
+                msg = "{}\n{}".format(patch['name'], output)
+                self.submit_result(patch, Verdict.FAIL, msg)
+                self.add_failure(msg)
                 continue
 
-            output = self.run_gitlint(commit.sha)
-            if output != None:
-                msg = "{}\n{}".format(commit.commit.message.splitlines()[0],
-                                      output)
-                self.add_failure(msg)
+            # Success
+            self.submit_result(patch, Verdict.PASS, "Gitlink PASS")
 
+        # Overall status
         if self.verdict != Verdict.FAIL:
             self.success()
 
-    def run_gitlint(self, sha):
+    def run_gitlint(self, patch):
         """
-        Run checkpatch script with commit sha.
+        Run checkpatch script with patch from the patchwork.
+        It saves the commit message to the file first and run gitlint with it.
+
         On success, it returns None.
         On failure, it returns the stderr output string
         """
 
         output = None
-        logger.info("Commit SHA: %s" % sha)
 
-        commit = subprocess.Popen(('git', 'log', '-1', '--pretty=%B', sha),
-                                  stdout=subprocess.PIPE,
-                                  cwd=src_dir)
+        # Save the patch commit message to file
+        filename = os.path.join(src_dir, str(patch['id']) + ".commit_msg")
+        logger.debug("Save commit msg: %s" % filename)
+        commit_msg_file = patchwork_save_patch_msg(patch, filename)
+
         try:
-            subprocess.check_output(('gitlint', '-C', self.gitlint_config),
-                                    stdin=commit.stdout,
+            subprocess.check_output(('gitlint', '-C', self.gitlint_config,
+                                        "--msg-filename", commit_msg_file),
                                     stderr=subprocess.STDOUT,
-                                    shell=True,
                                     cwd=src_dir)
         except subprocess.CalledProcessError as ex:
             output = ex.output.decode("utf-8")
@@ -503,34 +663,45 @@ class BuildSetup_ell(CiBase):
         """
         Configure the test case
         """
-        pass
+        logger.debug("Parser configuration")
+
+        self.enable = config_enable(config, "build")
+        self.submit_pw = config_submit_pw(config, "build")
 
     def run(self):
         logger.debug("##### Run Build: Setup ELL #####")
         self.start_timer()
 
-        # Run only if build is enabled
-        self.enable = config_enable(config, "build")
-        if self.enable == False:
-            self.skip("Build is disabled")
-
         self.config()
+
+        # Run only if build is enabled
+        if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Setup ELL SKIP(Disabled)")
+            self.skip("Build is disabled")
 
         # bootstrap-configure
         (ret, stdout, stderr) = run_cmd("./bootstrap-configure", cwd=ell_dir)
         if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Setup ELL - Configuration FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
         # make
         (ret, stdout, stderr) = run_cmd("make", cwd=ell_dir)
         if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Setup ELL - make FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
         # install
         (ret, stdout, stderr) = run_cmd("make", "install", cwd=ell_dir)
         if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Setup ELL - make install FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
+        self.submit_result(pw_series_patch_1, Verdict.PASS, "Setup ELL PASS")
         self.success()
 
 
@@ -543,7 +714,10 @@ class BuildPrep(CiBase):
         """
         Config the test case
         """
-        pass
+        logger.debug("Parser configuration")
+
+        self.enable = config_enable(config, "build")
+        self.submit_pw = config_submit_pw(config, "build")
 
     def run(self):
         logger.debug("##### Run Build: Prep #####")
@@ -555,6 +729,7 @@ class BuildPrep(CiBase):
         shutil.copytree(src_dir, src2_dir)
         logger.debug("Duplicate src_dir to src2_dir")
 
+        self.submit_result(pw_series_patch_1, Verdict.PASS, "Build Prep PASS")
         self.success()
 
 
@@ -567,27 +742,34 @@ class Build(CiBase):
         """
         Configure the test cases.
         """
-        pass
+        logger.debug("Parser configuration")
+
+        self.enable = config_enable(config, self.name)
+        self.submit_pw = config_submit_pw(config, self.name)
 
     def run(self):
         logger.debug("##### Run Build Test #####")
         self.start_timer()
 
-        self.enable = config_enable(config, self.name)
-
         self.config()
 
         # Check if it is disabled.
         if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Build SKIP(Disabled)")
             self.skip("Disabled in configuration")
 
         # bootstrap-configure
         (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
                                         cwd=src_dir)
         if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Build Configuration FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
         # At this point, consider test passed here
+        self.submit_result(pw_series_patch_1, Verdict.PASS,
+                           "Build Configuration PASS")
         self.success()
 
 
@@ -600,31 +782,39 @@ class BuildMake(CiBase):
         """
         Configure the test cases.
         """
-        pass
+        logger.debug("Parser configuration")
+
+        self.enable = config_enable(config, self.name)
+        self.submit_pw = config_submit_pw(config, self.name)
 
     def run(self):
         logger.debug("##### Run Build Make Test #####")
         self.start_timer()
 
-        self.enable = config_enable(config, 'build')
-
         self.config()
 
         # Check if it is disabled.
         if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Make SKIP(Disabled)")
             self.skip("Disabled in configuration")
 
         # Only run if "checkbuild" success
         if test_suite["build"].verdict != Verdict.PASS:
             logger.info("build test did not pass. skip this test")
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Make SKIP")
             self.skip("build test did not pass")
 
         # make
         (ret, stdout, stderr) = run_cmd("make", cwd=src_dir)
         if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Make FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
         # At this point, consider test passed here
+        self.submit_result(pw_series_patch_1, Verdict.PASS, "Make PASS")
         self.success()
 
 
@@ -637,32 +827,40 @@ class MakeCheck(CiBase):
         """
         Configure the test cases.
         """
-        pass
+        logger.debug("Parser configuration")
+
+        self.enable = config_enable(config, self.name)
+        self.submit_pw = config_submit_pw(config, self.name)
 
     def run(self):
         logger.debug("##### Run MakeCheck Test #####")
         self.start_timer()
 
-        self.enable = config_enable(config, self.name)
-
         self.config()
 
         # Check if it is disabled.
         if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Make Check SKIP(Disabled)")
             self.skip("Disabled in configuration")
 
         # Only run if "checkbuild" success
         if test_suite["build"].verdict != Verdict.PASS:
             logger.info("build test is not success. skip this test")
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Make SKIP")
             self.skip("build test is not success")
 
         # Run make check. Assume the code is already configuared and problem
         # to build.
         (ret, stdout, stderr) = run_cmd("make", "check", cwd=src_dir)
         if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Make Check FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
         # At this point, consider test passed here
+        self.submit_result(pw_series_patch_1, Verdict.PASS, "Make Check PASS")
         self.success()
 
 
@@ -675,34 +873,42 @@ class MakeDistcheck(CiBase):
         """
         Configure the test cases
         """
-        pass
+        logger.debug("Parser configuration")
+
+        self.enable = config_enable(config, self.name)
+        self.submit_pw = config_submit_pw(config, self.name)
 
     def run(self):
         logger.debug("##### Run Make Distcheck Test #####")
         self.start_timer()
 
-        self.enable = config_enable(config, 'makedistcheck')
-
         self.config()
 
         # Check if it is disabled.
         if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                             "Make Distcheck SKIP(Disabled)")
             self.skip("Disabled in configuration")
 
         # Actual test starts:
-
         # Configure
         (ret, stdout, stderr) = run_cmd("./bootstrap-configure", cwd=src_dir)
         if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Make Distcheck Configure FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
         # Make distcheck
         (ret, stdout, stderr) = run_cmd("fakeroot", "make", "distcheck",
                                         cwd=src_dir)
         if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Make Distcheck Make FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
         # At this point, consider test passed here
+        self.submit_result(pw_series_patch_1, Verdict.PASS,
+                           "Make Distcheck PASS")
         self.success()
 
 
@@ -715,18 +921,21 @@ class BuildExtEll(CiBase):
         """
         Configure the test cases.
         """
-        pass
+        logger.debug("Parser configuration")
+
+        self.enable = config_enable(config, self.name)
+        self.submit_pw = config_submit_pw(config, self.name)
 
     def run(self):
         logger.debug("##### Run Build w/exteranl ell - configure Test #####")
         self.start_timer()
 
-        self.enable = config_enable(config, self.name)
-
         self.config()
 
         # Check if it is disabled.
         if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Build External ELL SKIP(Disabled)")
             self.skip("Disabled in configuration")
 
         # bootstrap-configure
@@ -734,9 +943,13 @@ class BuildExtEll(CiBase):
                                         "--enable-external-ell",
                                         cwd=src2_dir)
         if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Build External ELL FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
         # At this point, consider test passed here
+        self.submit_result(pw_series_patch_1, Verdict.PASS,
+                           "Build External ELL PASS")
         self.success()
 
 
@@ -749,31 +962,40 @@ class BuildExtEllMake(CiBase):
         """
         Configure the test cases.
         """
-        pass
+        logger.debug("Parser configuration")
+
+        self.enable = config_enable(config, 'build_extell')
+        self.submit_pw = config_submit_pw(config, 'build_extell')
 
     def run(self):
         logger.debug("##### Run Build w/exteranl ell - make Test #####")
         self.start_timer()
 
-        self.enable = config_enable(config, 'build_extell')
-
         self.config()
 
         # Check if it is disabled.
         if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                              "Build With External ELL SKIP(Disabled)")
             self.skip("Disabled in configuration")
 
         # Only run if "build_extell" success
         if test_suite["build_extell"].verdict != Verdict.PASS:
             logger.info("build_extell test did not pass. skip this test")
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                             "Build With External ELL SKIP")
             self.skip("build_extell test did not pass")
 
         # make
         (ret, stdout, stderr) = run_cmd("make", cwd=src2_dir)
         if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Build Make with External ELL FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
         # At this point, consider test passed here
+        self.submit_result(pw_series_patch_1, Verdict.PASS,
+                           "Build Make with External ELL PASS")
         self.success()
 
 
@@ -892,6 +1114,7 @@ def init_github(repo, pr_num):
     global github_commits
     global pw_sid
     global pw_series
+    global pw_series_patch_1
 
     github_repo = Github(os.environ['GITHUB_TOKEN']).get_repo(repo)
     github_pr = github_repo.get_pull(pr_num)
@@ -899,6 +1122,7 @@ def init_github(repo, pr_num):
 
     pw_sid = patchwork_get_sid(github_pr.title)
     pw_series = patchwork_get_series(pw_sid)
+    pw_series_patch_1 = patchwork_get_patch(str(pw_series['patches'][0]['id']))
 
 def init_logging(verbose):
     """

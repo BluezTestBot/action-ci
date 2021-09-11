@@ -13,6 +13,9 @@ inputs:
   email_token:
     description: Email token
     required: true
+  patchwork_token:
+    description: Patchwork token
+    required: true
 
 runs:
   using: 'docker'
@@ -22,3 +25,4 @@ runs:
   env:
     GITHUB_TOKEN: ${{ inputs.github_token }}
     EMAIL_TOKEN: ${{ inputs.email_token }}
+    PATCHWORK_TOKEN: ${{ inputs.patchwork_token }}
