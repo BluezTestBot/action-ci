@@ -599,7 +599,7 @@ class GitLint(CiBase):
         # Check if it is disabled.
         if self.enable == False:
             self.submit_result(pw_series_patch_1, Verdict.SKIP,
-                               "Gitlink SKIP(Disabled)")
+                               "Gitlint SKIP(Disabled)")
             self.skip("Disabled in configuration")
 
         # Use patches from patchwork
@@ -619,7 +619,7 @@ class GitLint(CiBase):
                 continue
 
             # Success
-            self.submit_result(patch, Verdict.PASS, "Gitlink PASS")
+            self.submit_result(patch, Verdict.PASS, "Gitlint PASS")
 
         # Overall status
         if self.verdict != Verdict.FAIL:
