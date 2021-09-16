@@ -1057,21 +1057,31 @@ Output:
 
 ONELINE_RESULT = '''{test:<30}{result:<10}{elapsed:.2f} seconds\n'''
 
+def all_test_passed():
+    """
+    Return True if all test passed, otherwise return False
+    """
+
+    for test_name, test in test_suite.items():
+        if test.verdict != Verdict.PASS:
+            return False
+
+    return True
+
 def report_ci():
     """
     Generate CI result report and send email
     """
 
-    results = "Details\n"
+    results = ""
     summary = "Test Summary:\n"
 
+    if all_test_passed() == False:
+        results = "Details\n"
+
     for test_name, test in test_suite.items():
-        if test.verdict == Verdict.PASS:
-            results += TEST_REPORT_PASS.format(test.display_name,
-                                               test.desc)
-            summary += ONELINE_RESULT.format(test=test.display_name,
-                                             result='PASS',
-                                             elapsed=test.elapsed())
+        # Don't print PASS to simplify the email
+
         if test.verdict == Verdict.FAIL:
             results += TEST_REPORT_FAIL.format(test.display_name,
                                                "FAIL",
