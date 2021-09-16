@@ -1080,8 +1080,11 @@ def report_ci():
         results = "Details\n"
 
     for test_name, test in test_suite.items():
-        # Don't print PASS to simplify the email
-
+        if test.verdict == Verdict.PASS:
+            # No need to add result of passed tests to simplify the email
+            summary += ONELINE_RESULT.format(test=test.display_name,
+                                             result='PASS',
+                                             elapsed=test.elapsed())
         if test.verdict == Verdict.FAIL:
             results += TEST_REPORT_FAIL.format(test.display_name,
                                                "FAIL",
