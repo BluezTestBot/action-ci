@@ -105,6 +105,8 @@ def patchwork_save_patch_msg(patch, filename):
     """ Save patch commit message to file and return the file path """
 
     with open(filename, "wb") as file:
+        file.write(bytes(patch['name'], 'utf-8'))
+        file.write(b"\n\n")
         file.write(bytes(patch['content'], 'utf-8'))
 
     return filename
