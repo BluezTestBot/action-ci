@@ -13,6 +13,9 @@ echo "HEAD-REF:   $GITHUB_HEAD_REF"
 echo "BASE-REF:   $GITHUB_BASE_REF"
 echo "PWD:        $(pwd)"
 
+git config --global user.name "$GITHUB_ACTOR"
+git config --global user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
 SRC_PATH=$GITHUB_WORKSPACE/$1
 ELL_PATH=$GITHUB_WORKSPACE/ell
 

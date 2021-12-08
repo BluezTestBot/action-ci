@@ -33,6 +33,7 @@ pw_series_patch_1 = None
 base_dir = None
 src_dir = None
 src2_dir = None
+src3_dir = None
 ell_dir = None
 
 test_suite = {}
@@ -731,6 +732,10 @@ class BuildPrep(CiBase):
         shutil.copytree(src_dir, src2_dir)
         logger.debug("Duplicate src_dir to src2_dir")
 
+        # Duplicate the src for 2nd build test case
+        shutil.copytree(src_dir, src3_dir)
+        logger.debug("Duplicate src_dir to src3_dir")
+
         self.submit_result(pw_series_patch_1, Verdict.PASS, "Build Prep PASS")
         self.success()
 
@@ -1001,6 +1006,117 @@ class BuildExtEllMake(CiBase):
         self.success()
 
 
+class IncrementalBuild(CiBase):
+    name = "incremental_build"
+    display_name = "Incremental Build with patches"
+    desc = "Incremental build per patch in the series"
+
+    def config(self):
+        """
+        Configure the test cases
+        """
+        logger.debug("Parser configuration")
+
+        self.enable = config_enable(config, 'incremental_build')
+        self.submit_pw = config_submit_pw(config, 'incremental_build')
+
+    def run(self):
+        logger.debug("##### Run Incremental Build Test #####")
+        self.start_timer()
+
+        self.config()
+
+        # Check if it is disabled.
+        if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Incremental Build SKIP(Disabled)")
+            self.skip("Disabled in configuration")
+
+        # Only run if "checkbuild" success
+        if test_suite["build"].verdict != Verdict.PASS:
+            logger.info("build test is not success. skip this test")
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Incremental Build SKIP(Build Fail)")
+            self.skip("Build failed")
+
+        # If there is only one patch, no need to run and just return success
+        if github_pr.commits == 1:
+            logger.debug("Only 1 patch and no need to run here")
+            self.success()
+            return
+
+        # Make the source base to workflow branch
+        (ret, stdout, stderr) = run_cmd("git", "checkout", "origin/workflow",
+                                        cwd=src3_dir)
+
+        # Get the patch from the series, apply it and build.
+        for patch_item in pw_series['patches']:
+            logger.debug("patch id: %s" % patch_item['id'])
+
+            patch = patchwork_get_patch(str(patch_item["id"]))
+
+            # Apply patch
+            (output, error) = self.apply_patch(patch)
+            if error != None:
+                msg = "{}\n{}".format(patch['name'], error)
+                self.submit_result(patch, Verdict.FAIL,
+                                   "Applying Patch FAIL: " + error)
+                self.add_failure_end_test(msg)
+
+            # Configure
+            (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
+                                            cwd=src3_dir)
+            if ret:
+                self.submit_result(patch, Verdict.FAIL,
+                                   "Build Configuration FAIL: " + stderr)
+                self.add_failure_end_test(stderr)
+
+            # Make
+            (ret, stdout, stderr) = run_cmd("make", cwd=src3_dir)
+            if ret:
+                self.submit_result(patch, Verdict.FAIL,
+                                   "Make FAIL: " + stderr)
+                self.add_failure_end_test(stderr)
+
+            # Clean
+            (ret, stdout, stderr) = run_cmd("make", "distclean",
+                                            cwd=src3_dir)
+            if ret:
+                self.submit_result(patch, Verdict.FAIL,
+                                   "Make Clean FAIL: " + stderr)
+                self.add_failure_end_test(stderr)
+
+        # All patch passed the build test
+        self.submit_result(pw_series_patch_1, Verdict.PASS, "Pass")
+        self.success()
+
+    def apply_patch(sefl, patch):
+        """
+        Save the patch and apply to the source tree
+        """
+
+        output = None
+        error = None
+
+        # Save the patch content to file
+        filename = os.path.join(src3_dir, str(patch['id']) + ".patch")
+        logger.debug("Save patch: %s" % filename)
+        patch_file = patchwork_save_patch(patch, filename)
+
+        try:
+            output = subprocess.check_output(('git', 'am', patch_file),
+                                             stderr=subprocess.STDOUT,
+                                             cwd=src3_dir)
+            output = output.decode("utf-8")
+
+        except subprocess.CalledProcessError as ex:
+            error = ex.output.decode("utf-8")
+            logger.error("git am returned with error")
+            logger.error("output: %s" % error)
+
+        return (output, error)
+
+
 class EndTest(Exception):
     """
     End of Test
@@ -1207,7 +1323,7 @@ def parse_args():
 
 def main():
 
-    global src_dir, src2_dir, ell_dir, base_dir
+    global src_dir, src2_dir, src3_dir, ell_dir, base_dir
 
     args = parse_args()
 
@@ -1221,6 +1337,7 @@ def main():
     base_dir = os.path.abspath(os.path.curdir)
     src_dir = args.src_path
     src2_dir = src_dir + "2"
+    src3_dir = src_dir + "3"
     ell_dir = args.ell_path
 
     # Fetch commits in the tree for checkpath and gitlint
