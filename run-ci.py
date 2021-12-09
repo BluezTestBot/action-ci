@@ -1052,6 +1052,7 @@ class IncrementalBuild(CiBase):
         # Get the patch from the series, apply it and build.
         for patch_item in pw_series['patches']:
             logger.debug("patch id: %s" % patch_item['id'])
+            logger.debug("patch name: %s" % patch_item['name'])
 
             patch = patchwork_get_patch(str(patch_item["id"]))
 
@@ -1062,6 +1063,8 @@ class IncrementalBuild(CiBase):
                 self.submit_result(patch, Verdict.FAIL,
                                    "Applying Patch FAIL: " + error)
                 self.add_failure_end_test(msg)
+            logger.debug("Patch applied")
+
 
             # Configure
             (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
@@ -1090,7 +1093,7 @@ class IncrementalBuild(CiBase):
         self.submit_result(pw_series_patch_1, Verdict.PASS, "Pass")
         self.success()
 
-    def apply_patch(sefl, patch):
+    def apply_patch(self, patch):
         """
         Save the patch and apply to the source tree
         """
