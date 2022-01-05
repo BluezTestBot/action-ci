@@ -34,6 +34,7 @@ base_dir = None
 src_dir = None
 src2_dir = None
 src3_dir = None
+src4_dir = None
 ell_dir = None
 
 test_suite = {}
@@ -736,6 +737,10 @@ class BuildPrep(CiBase):
         shutil.copytree(src_dir, src3_dir)
         logger.debug("Duplicate src_dir to src3_dir")
 
+        # Duplicate the src for make check with valgrind
+        shutil.copytree(src_dir, src4_dir)
+        logger.debug("Duplicate src_dir to src4_dir")
+
         self.submit_result(pw_series_patch_1, Verdict.PASS, "Build Prep PASS")
         self.success()
 
@@ -861,6 +866,67 @@ class MakeCheck(CiBase):
         # Run make check. Assume the code is already configuared and problem
         # to build.
         (ret, stdout, stderr) = run_cmd("make", "check", cwd=src_dir)
+        if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Make Check FAIL: " + stderr)
+            self.add_failure_end_test(stderr)
+
+        # At this point, consider test passed here
+        self.submit_result(pw_series_patch_1, Verdict.PASS, "Make Check PASS")
+        self.success()
+
+class MakeCheckValgrind(CiBase):
+    name = "makecheckvalgrind"
+    display_name = "Make Check w/Valgrind"
+    desc = "Run \'make check\' with Valgrind"
+
+    def config(self):
+        """
+        Configure the test cases.
+        """
+        logger.debug("Parser configuration")
+
+        self.enable = config_enable(config, self.name)
+        self.submit_pw = config_submit_pw(config, self.name)
+
+    def run(self):
+        logger.debug("##### Run MakeCheck w/ Valgrind Test #####")
+        self.start_timer()
+
+        self.config()
+
+        # Check if it is disabled.
+        if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Make Check Valgrind SKIP(Disabled)")
+            self.skip("Disabled in configuration")
+
+        # Only run if "checkbuild" success
+        if test_suite["build"].verdict != Verdict.PASS:
+            logger.info("build test is not success. skip this test")
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Make SKIP")
+            self.skip("build test is not success")
+
+        # bootstrap-configure without lsan and asan enabled
+        (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
+                                        "--disable-lsan", "--disable-asan",
+                                        cwd=src4_dir)
+        if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Build Configuration FAIL: " + stderr)
+            self.add_failure_end_test(stderr)
+
+        # make
+        (ret, stdout, stderr) = run_cmd("make", cwd=src4_dir)
+        if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Make FAIL: " + stderr)
+            self.add_failure_end_test(stderr)
+
+        # Run make check. Assume the code is already configuared and problem
+        # to build.
+        (ret, stdout, stderr) = run_cmd("make", "check", cwd=src4_dir)
         if ret:
             self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                "Make Check FAIL: " + stderr)
@@ -1326,7 +1392,7 @@ def parse_args():
 
 def main():
 
-    global src_dir, src2_dir, src3_dir, ell_dir, base_dir
+    global src_dir, src2_dir, src3_dir, src4_dir, ell_dir, base_dir
 
     args = parse_args()
 
@@ -1341,6 +1407,7 @@ def main():
     src_dir = args.src_path
     src2_dir = src_dir + "2"
     src3_dir = src_dir + "3"
+    src4_dir = src_dir + "4"
     ell_dir = args.ell_path
 
     # Fetch commits in the tree for checkpath and gitlint
