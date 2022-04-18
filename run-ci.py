@@ -1298,13 +1298,7 @@ def report_ci():
                                              result='ERROR',
                                              elapsed=test.elapsed())
         if test.verdict == Verdict.SKIP:
-            results += TEST_REPORT_FAIL.format(test.display_name,
-                                               "SKIPPED",
-                                               test.desc,
-                                               test.output)
-            summary += ONELINE_RESULT.format(test=test.display_name,
-                                             result='ERROR',
-                                             elapsed=test.elapsed())
+            continue
 
     body = EMAIL_MESSAGE.format(pw_series["web_url"], summary + '\n' + results)
 
