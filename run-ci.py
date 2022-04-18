@@ -493,6 +493,9 @@ class CheckPatch(CiBase):
 
             logger.debug("checkpatch_pl = %s" % self.checkpatch_pl)
 
+        if 'no_signoff' not in config['checkpatch']:
+            config['checkpatch']['no_signoff'] = False
+
     def run(self):
         logger.debug("##### Run CheckPatch Test #####")
         self.start_timer()
@@ -512,7 +515,8 @@ class CheckPatch(CiBase):
             patch = patchwork_get_patch(str(patch_item["id"]))
 
             # Run checkpatch
-            (output, error) = self.run_checkpatch(patch)
+            (output, error) = self.run_checkpatch(patch,
+                                    no_sob=config['checkpatch']['no_signoff'])
 
             # Failed / Warning
             if error != None:
@@ -540,7 +544,7 @@ class CheckPatch(CiBase):
         if self.verdict != Verdict.FAIL:
             self.success()
 
-    def run_checkpatch(self, patch):
+    def run_checkpatch(self, patch, no_sob=False):
         """
         Run checkpatch script with patch from the patchwork.
         It saves to file first and run checkpatch with the saved patch file.
@@ -548,18 +552,23 @@ class CheckPatch(CiBase):
         On success, it returns None.
         On failure, it returns the stderr output string
         """
+        args = [ self.checkpatch_pl, '--no-tree' ]
 
         output = None
         error = None
+
+        if no_sob:
+            args.append('--no-signoff')
 
         # Save the patch content to file
         filename = os.path.join(src_dir, str(patch['id']) + ".patch")
         logger.debug("Save patch: %s" % filename)
         patch_file = patchwork_save_patch(patch, filename)
 
+        args.append(patch_file)
+
         try:
-            output = subprocess.check_output((self.checkpatch_pl, '--no-tree',
-                                                                patch_file),
+            output = subprocess.check_output(args,
                                     stderr=subprocess.STDOUT,
                                     cwd=src_dir)
             output = output.decode("utf-8")
