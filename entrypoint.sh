@@ -11,6 +11,8 @@ echo "SHA:        $GITHUB_SHA"
 echo "REF:        $GITHUB_REF"
 echo "HEAD-REF:   $GITHUB_HEAD_REF"
 echo "BASE-REF:   $GITHUB_BASE_REF"
+echo "CONFIG:     $CONFIG"
+echo "EMAIL:      $EMAIL"
 echo "PWD:        $(pwd)"
 
 git config --global user.name "$GITHUB_ACTOR"
@@ -32,4 +34,4 @@ git clone --depth=1 https://git.kernel.org/pub/scm/libs/ell/ell.git $ELL_PATH
 PR=${GITHUB_REF#"refs/pull/"}
 PR=${PR%"/merge"}
 
-/run-ci.py -c /config.ini -p $PR -r $GITHUB_REPOSITORY -s $SRC_PATH -e $ELL_PATH -v
+/run-ci.py -c $CONFIG -m $EMAIL -p $PR -r $GITHUB_REPOSITORY -s $SRC_PATH -e $ELL_PATH -v

@@ -17,6 +17,8 @@ from enum import Enum
 from github import Github
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from urllib.request import urlretrieve
+
 
 # Globals
 logger = None
@@ -41,23 +43,7 @@ test_suite = {}
 
 PW_BASE_URL = "https://patchwork.kernel.org/api/1.1"
 
-EMAIL_MESSAGE = '''This is automated email and please do not reply to this email!
-
-Dear submitter,
-
-Thank you for submitting the patches to the linux bluetooth mailing list.
-This is a CI test results with your patch series:
-PW Link:{}
-
----Test result---
-
-{}
-
----
-Regards,
-Linux Bluetooth
-
-'''
+EMAIL_MESSAGE = ''
 
 def requests_url(url):
     """ Helper function to requests WEB API GET with URL """
@@ -1382,7 +1368,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Check patch style in the pull request")
     parser.add_argument('-c', '--config-file', default='config.ini',
-                        help='Configuration file')
+                        help='Configuration file or URL')
     parser.add_argument('-l', '--show-test-list', action='store_true',
                         help='Display supported CI tests')
     parser.add_argument('-p', '--pr-num', required=True, type=int,
@@ -1395,14 +1381,33 @@ def parse_args():
                         help='Path to ELL source')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Display debugging info')
+    parser.add_argument('-m', '--email-message',
+                        default='/default-email-message.txt')
 
     return parser.parse_args()
+
+def is_url(config: str) -> bool:
+    prefixes = ('http://', 'https://')
+
+    return config.startswith(prefixes)
 
 def main():
 
     global src_dir, src2_dir, src3_dir, src4_dir, ell_dir, base_dir
+    global EMAIL_MESSAGE
 
     args = parse_args()
+
+    if is_url(args.config_file):
+        urlretrieve(args.config_file, '/tmp/config.ini')
+        args.config_file = '/tmp/config.ini'
+
+    if is_url(args.email_message):
+        urlretrieve(args.email_message, '/tmp/email-message.txt')
+        args.email_message = '/tmp/email-message.txt'
+
+    with open(args.email_message, 'r') as f:
+        EMAIL_MESSAGE = f.read()
 
     init_logging(args.verbose)
 

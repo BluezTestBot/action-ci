@@ -16,6 +16,14 @@ inputs:
   patchwork_token:
     description: Patchwork token
     required: true
+  config:
+    description: Configuration file or URL
+    required: false
+    default: /config.ini
+  email_message:
+    description: Email message file or URL
+    required: false
+    default: /default-email-message.txt
 
 runs:
   using: 'docker'
@@ -26,3 +34,5 @@ runs:
     GITHUB_TOKEN: ${{ inputs.github_token }}
     EMAIL_TOKEN: ${{ inputs.email_token }}
     PATCHWORK_TOKEN: ${{ inputs.patchwork_token }}
+    CONFIG: ${{ inputs.config }}
+    EMAIL: ${{ inputs.email_message }}
