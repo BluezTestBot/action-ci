@@ -388,13 +388,15 @@ class CiBase:
     name = None
     display_name = None
     desc = None
-    enable = True
     start_time = 0
     end_time = 0
-    submit_pw = False
 
     verdict = Verdict.PENDING
     output = ""
+
+    def __init__(self):
+        self.enable = config_enable(config, self.name)
+        self.submit_pw = config_submit_pw(config, self.name)
 
     def success(self):
         self.end_timer()
@@ -472,9 +474,6 @@ class CheckPatch(CiBase):
         Config the test cases.
         """
         logger.debug("Parser configuration")
-
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
 
         if self.name in config:
             if 'bin_path' in config[self.name]:
@@ -583,9 +582,6 @@ class GitLint(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
-
         if self.name in config:
             if 'config_path' in config[self.name]:
                 self.gitlint_config = config[self.name]['config_path']
@@ -667,9 +663,6 @@ class BuildSetup_ell(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, "build")
-        self.submit_pw = config_submit_pw(config, "build")
-
     def run(self):
         logger.debug("##### Run Build: Setup ELL #####")
         self.start_timer()
@@ -718,9 +711,6 @@ class BuildPrep(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, "build")
-        self.submit_pw = config_submit_pw(config, "build")
-
     def run(self):
         logger.debug("##### Run Build: Prep #####")
         self.start_timer()
@@ -753,9 +743,6 @@ class Build(CiBase):
         Configure the test cases.
         """
         logger.debug("Parser configuration")
-
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
 
     def run(self):
         logger.debug("##### Run Build Test #####")
@@ -793,9 +780,6 @@ class BuildMake(CiBase):
         Configure the test cases.
         """
         logger.debug("Parser configuration")
-
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
 
     def run(self):
         logger.debug("##### Run Build Make Test #####")
@@ -839,9 +823,6 @@ class MakeCheck(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
-
     def run(self):
         logger.debug("##### Run MakeCheck Test #####")
         self.start_timer()
@@ -883,9 +864,6 @@ class MakeCheckValgrind(CiBase):
         Configure the test cases.
         """
         logger.debug("Parser configuration")
-
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
 
     def run(self):
         logger.debug("##### Run MakeCheck w/ Valgrind Test #####")
@@ -946,9 +924,6 @@ class MakeDistcheck(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
-
     def run(self):
         logger.debug("##### Run Make Distcheck Test #####")
         self.start_timer()
@@ -994,9 +969,6 @@ class BuildExtEll(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
-
     def run(self):
         logger.debug("##### Run Build w/exteranl ell - configure Test #####")
         self.start_timer()
@@ -1034,9 +1006,6 @@ class BuildExtEllMake(CiBase):
         Configure the test cases.
         """
         logger.debug("Parser configuration")
-
-        self.enable = config_enable(config, 'build_extell')
-        self.submit_pw = config_submit_pw(config, 'build_extell')
 
     def run(self):
         logger.debug("##### Run Build w/exteranl ell - make Test #####")
@@ -1081,9 +1050,6 @@ class IncrementalBuild(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, 'incremental_build')
-        self.submit_pw = config_submit_pw(config, 'incremental_build')
-
     def run(self):
         logger.debug("##### Run Incremental Build Test #####")
         self.start_timer()
@@ -1106,6 +1072,8 @@ class IncrementalBuild(CiBase):
         # If there is only one patch, no need to run and just return success
         if github_pr.commits == 1:
             logger.debug("Only 1 patch and no need to run here")
+            self.submit_result(pw_series_patch_1, Verdict.PASS,
+                                "Incremental build not run PASS")
             self.success()
             return
 
@@ -1204,12 +1172,15 @@ def run_ci(args):
             print(testcase.name)
         return 0
 
-    # Run tests
+    # Initialize patchwork checks as 'pending'
     for testcase in CiBase.__subclasses__():
         test = testcase()
-
         test_suite[test.name] = test
+        test.submit_result(pw_series_patch_1, Verdict.PENDING,
+                               "%s PENDING" % test.display_name)
 
+    # Run tests
+    for test in test_suite.values():
         try:
             test.run()
         except EndTest:
