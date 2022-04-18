@@ -234,6 +234,9 @@ def config_submit_pw(config, name):
     Return True if it is specified and value is "yes"
     """
 
+    if not config_enable(config, name):
+        return False
+
     if name in config:
         if 'submit_pw' in config[name]:
             if config[name]['submit_pw'] == 'yes':
