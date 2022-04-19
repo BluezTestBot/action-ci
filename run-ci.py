@@ -1192,8 +1192,10 @@ def run_ci(args):
             num_fails += 1
 
         logger.info(test.name + " result: " + test.verdict.name)
-        logger.debug("Post message to github: " + test.output)
-        github_pr_post_comment(test)
+
+        if test.enable:
+            logger.debug("Post message to github: " + test.output)
+            github_pr_post_comment(test)
 
     return num_fails
 
