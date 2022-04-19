@@ -17,6 +17,8 @@ from enum import Enum
 from github import Github
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from urllib.request import urlretrieve
+
 
 # Globals
 logger = None
@@ -40,24 +42,8 @@ ell_dir = None
 test_suite = {}
 
 PW_BASE_URL = "https://patchwork.kernel.org/api/1.1"
-
-EMAIL_MESSAGE = '''This is automated email and please do not reply to this email!
-
-Dear submitter,
-
-Thank you for submitting the patches to the linux bluetooth mailing list.
-This is a CI test results with your patch series:
-PW Link:{}
-
----Test result---
-
-{}
-
----
-Regards,
-Linux Bluetooth
-
-'''
+PW_USER = None
+EMAIL_MESSAGE = ''
 
 def requests_url(url):
     """ Helper function to requests WEB API GET with URL """
@@ -154,7 +140,7 @@ def patchwork_post_checks(url, state, target_url, context, description):
         headers['Authorization'] = f'Token {token}'
 
     content = {
-        'user': 104215,
+        'user': PW_USER,
         'state': state,
         'target_url': target_url,
         'context': context,
@@ -247,6 +233,9 @@ def config_submit_pw(config, name):
     Check "submit_pw" in config[name]
     Return True if it is specified and value is "yes"
     """
+
+    if not config_enable(config, name):
+        return False
 
     if name in config:
         if 'submit_pw' in config[name]:
@@ -399,13 +388,15 @@ class CiBase:
     name = None
     display_name = None
     desc = None
-    enable = True
     start_time = 0
     end_time = 0
-    submit_pw = False
 
     verdict = Verdict.PENDING
     output = ""
+
+    def __init__(self):
+        self.enable = config_enable(config, self.name)
+        self.submit_pw = config_submit_pw(config, self.name)
 
     def success(self):
         self.end_timer()
@@ -484,14 +475,14 @@ class CheckPatch(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
-
         if self.name in config:
             if 'bin_path' in config[self.name]:
                 self.checkpatch_pl = config[self.name]['bin_path']
 
             logger.debug("checkpatch_pl = %s" % self.checkpatch_pl)
+
+        if 'no_signoff' not in config['checkpatch']:
+            config['checkpatch']['no_signoff'] = False
 
     def run(self):
         logger.debug("##### Run CheckPatch Test #####")
@@ -512,7 +503,8 @@ class CheckPatch(CiBase):
             patch = patchwork_get_patch(str(patch_item["id"]))
 
             # Run checkpatch
-            (output, error) = self.run_checkpatch(patch)
+            (output, error) = self.run_checkpatch(patch,
+                                    no_sob=config['checkpatch']['no_signoff'])
 
             # Failed / Warning
             if error != None:
@@ -540,7 +532,7 @@ class CheckPatch(CiBase):
         if self.verdict != Verdict.FAIL:
             self.success()
 
-    def run_checkpatch(self, patch):
+    def run_checkpatch(self, patch, no_sob=False):
         """
         Run checkpatch script with patch from the patchwork.
         It saves to file first and run checkpatch with the saved patch file.
@@ -548,18 +540,23 @@ class CheckPatch(CiBase):
         On success, it returns None.
         On failure, it returns the stderr output string
         """
+        args = [ self.checkpatch_pl, '--no-tree' ]
 
         output = None
         error = None
+
+        if no_sob:
+            args.append('--no-signoff')
 
         # Save the patch content to file
         filename = os.path.join(src_dir, str(patch['id']) + ".patch")
         logger.debug("Save patch: %s" % filename)
         patch_file = patchwork_save_patch(patch, filename)
 
+        args.append(patch_file)
+
         try:
-            output = subprocess.check_output((self.checkpatch_pl, '--no-tree',
-                                                                patch_file),
+            output = subprocess.check_output(args,
                                     stderr=subprocess.STDOUT,
                                     cwd=src_dir)
             output = output.decode("utf-8")
@@ -584,9 +581,6 @@ class GitLint(CiBase):
         Config the test cases.
         """
         logger.debug("Parser configuration")
-
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
 
         if self.name in config:
             if 'config_path' in config[self.name]:
@@ -669,9 +663,6 @@ class BuildSetup_ell(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, "build")
-        self.submit_pw = config_submit_pw(config, "build")
-
     def run(self):
         logger.debug("##### Run Build: Setup ELL #####")
         self.start_timer()
@@ -720,9 +711,6 @@ class BuildPrep(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, "build")
-        self.submit_pw = config_submit_pw(config, "build")
-
     def run(self):
         logger.debug("##### Run Build: Prep #####")
         self.start_timer()
@@ -755,9 +743,6 @@ class Build(CiBase):
         Configure the test cases.
         """
         logger.debug("Parser configuration")
-
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
 
     def run(self):
         logger.debug("##### Run Build Test #####")
@@ -795,9 +780,6 @@ class BuildMake(CiBase):
         Configure the test cases.
         """
         logger.debug("Parser configuration")
-
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
 
     def run(self):
         logger.debug("##### Run Build Make Test #####")
@@ -841,9 +823,6 @@ class MakeCheck(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
-
     def run(self):
         logger.debug("##### Run MakeCheck Test #####")
         self.start_timer()
@@ -885,9 +864,6 @@ class MakeCheckValgrind(CiBase):
         Configure the test cases.
         """
         logger.debug("Parser configuration")
-
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
 
     def run(self):
         logger.debug("##### Run MakeCheck w/ Valgrind Test #####")
@@ -948,9 +924,6 @@ class MakeDistcheck(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
-
     def run(self):
         logger.debug("##### Run Make Distcheck Test #####")
         self.start_timer()
@@ -996,9 +969,6 @@ class BuildExtEll(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, self.name)
-        self.submit_pw = config_submit_pw(config, self.name)
-
     def run(self):
         logger.debug("##### Run Build w/exteranl ell - configure Test #####")
         self.start_timer()
@@ -1036,9 +1006,6 @@ class BuildExtEllMake(CiBase):
         Configure the test cases.
         """
         logger.debug("Parser configuration")
-
-        self.enable = config_enable(config, 'build_extell')
-        self.submit_pw = config_submit_pw(config, 'build_extell')
 
     def run(self):
         logger.debug("##### Run Build w/exteranl ell - make Test #####")
@@ -1083,9 +1050,6 @@ class IncrementalBuild(CiBase):
         """
         logger.debug("Parser configuration")
 
-        self.enable = config_enable(config, 'incremental_build')
-        self.submit_pw = config_submit_pw(config, 'incremental_build')
-
     def run(self):
         logger.debug("##### Run Incremental Build Test #####")
         self.start_timer()
@@ -1108,6 +1072,8 @@ class IncrementalBuild(CiBase):
         # If there is only one patch, no need to run and just return success
         if github_pr.commits == 1:
             logger.debug("Only 1 patch and no need to run here")
+            self.submit_result(pw_series_patch_1, Verdict.PASS,
+                                "Incremental build not run PASS")
             self.success()
             return
 
@@ -1206,12 +1172,15 @@ def run_ci(args):
             print(testcase.name)
         return 0
 
-    # Run tests
+    # Initialize patchwork checks as 'pending'
     for testcase in CiBase.__subclasses__():
         test = testcase()
-
         test_suite[test.name] = test
+        test.submit_result(pw_series_patch_1, Verdict.PENDING,
+                               "%s PENDING" % test.display_name)
 
+    # Run tests
+    for test in test_suite.values():
         try:
             test.run()
         except EndTest:
@@ -1223,8 +1192,10 @@ def run_ci(args):
             num_fails += 1
 
         logger.info(test.name + " result: " + test.verdict.name)
-        logger.debug("Post message to github: " + test.output)
-        github_pr_post_comment(test)
+
+        if test.enable:
+            logger.debug("Post message to github: " + test.output)
+            github_pr_post_comment(test)
 
     return num_fails
 
@@ -1289,13 +1260,7 @@ def report_ci():
                                              result='ERROR',
                                              elapsed=test.elapsed())
         if test.verdict == Verdict.SKIP:
-            results += TEST_REPORT_FAIL.format(test.display_name,
-                                               "SKIPPED",
-                                               test.desc,
-                                               test.output)
-            summary += ONELINE_RESULT.format(test=test.display_name,
-                                             result='ERROR',
-                                             elapsed=test.elapsed())
+            continue
 
     body = EMAIL_MESSAGE.format(pw_series["web_url"], summary + '\n' + results)
 
@@ -1379,7 +1344,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Check patch style in the pull request")
     parser.add_argument('-c', '--config-file', default='config.ini',
-                        help='Configuration file')
+                        help='Configuration file or URL')
     parser.add_argument('-l', '--show-test-list', action='store_true',
                         help='Display supported CI tests')
     parser.add_argument('-p', '--pr-num', required=True, type=int,
@@ -1392,14 +1357,36 @@ def parse_args():
                         help='Path to ELL source')
     parser.add_argument('-v', '--verbose', action='store_true',
                         help='Display debugging info')
+    parser.add_argument('-m', '--email-message',
+                        default='/default-email-message.txt')
+    parser.add_argument('-u', '--user', type=int, required=True)
 
     return parser.parse_args()
+
+def is_url(config: str) -> bool:
+    prefixes = ('http://', 'https://')
+
+    return config.startswith(prefixes)
 
 def main():
 
     global src_dir, src2_dir, src3_dir, src4_dir, ell_dir, base_dir
+    global EMAIL_MESSAGE
 
     args = parse_args()
+
+    if is_url(args.config_file):
+        urlretrieve(args.config_file, '/tmp/config.ini')
+        args.config_file = '/tmp/config.ini'
+
+    if is_url(args.email_message):
+        urlretrieve(args.email_message, '/tmp/email-message.txt')
+        args.email_message = '/tmp/email-message.txt'
+
+    with open(args.email_message, 'r') as f:
+        EMAIL_MESSAGE = f.read()
+
+    PW_USER = args.user
 
     init_logging(args.verbose)
 

@@ -1,0 +1,15 @@
+This is automated email and please do not reply to this email!
+
+Dear submitter,
+
+Thank you for submitting the patches to the linux bluetooth mailing list.
+This is a CI test results with your patch series:
+PW Link:{}
+
+---Test result---
+
+{}
+
+---
+Regards,
+Linux Bluetooth
