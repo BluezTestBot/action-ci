@@ -42,7 +42,7 @@ ell_dir = None
 test_suite = {}
 
 PW_BASE_URL = "https://patchwork.kernel.org/api/1.1"
-
+PW_USER = None
 EMAIL_MESSAGE = ''
 
 def requests_url(url):
@@ -140,7 +140,7 @@ def patchwork_post_checks(url, state, target_url, context, description):
         headers['Authorization'] = f'Token {token}'
 
     content = {
-        'user': 104215,
+        'user': PW_USER,
         'state': state,
         'target_url': target_url,
         'context': context,
@@ -1357,6 +1357,7 @@ def parse_args():
                         help='Display debugging info')
     parser.add_argument('-m', '--email-message',
                         default='/default-email-message.txt')
+    parser.add_argument('-u', '--user', type=int, required=True)
 
     return parser.parse_args()
 
@@ -1382,6 +1383,8 @@ def main():
 
     with open(args.email_message, 'r') as f:
         EMAIL_MESSAGE = f.read()
+
+    PW_USER = args.user
 
     init_logging(args.verbose)
 
