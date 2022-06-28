@@ -35,6 +35,7 @@ src_dir = None
 src2_dir = None
 src3_dir = None
 src4_dir = None
+src5_dir = None
 ell_dir = None
 
 test_suite = {}
@@ -227,6 +228,17 @@ def run_cmd(*args, cwd=None):
 
     return (proc.returncode, stdout, stderr)
 
+def git_config_add_safe_dir(path):
+    """
+    Add @path to the safe.directory in git config
+    """
+
+    (ret, stdout, stderr) = run_cmd("git", "config", "--global", "--add", "safe.directory", path, cwd=path)
+    if ret:
+        logger.error("Failed to add %s to safe.directory" % path)
+    else:
+        logger.debug("%s is added to safe.directory" % path)
+
 def config_enable(config, name):
     """
     Check "enable" in config[name].
@@ -416,6 +428,11 @@ class CiBase:
         self.output = msg
         self.end_timer()
         raise EndTest
+
+    def warning(self, msg):
+        self.verdict = Verdict.WARNING
+        self.output = msg
+        self.end_timer()
 
     def skip(self, msg):
         self.verdict = Verdict.SKIP
@@ -731,15 +748,23 @@ class BuildPrep(CiBase):
 
         # Duplicate the src for 2nd build test case
         shutil.copytree(src_dir, src2_dir)
+        git_config_add_safe_dir(src2_dir)
         logger.debug("Duplicate src_dir to src2_dir")
 
         # Duplicate the src for 2nd build test case
         shutil.copytree(src_dir, src3_dir)
+        git_config_add_safe_dir(src3_dir)
         logger.debug("Duplicate src_dir to src3_dir")
 
         # Duplicate the src for make check with valgrind
         shutil.copytree(src_dir, src4_dir)
+        git_config_add_safe_dir(src4_dir)
         logger.debug("Duplicate src_dir to src4_dir")
+
+        # Duplicate the src for scan-build
+        shutil.copytree(src_dir, src5_dir)
+        git_config_add_safe_dir(src5_dir)
+        logger.debug("Duplicate src_dir to src5_dir")
 
         self.submit_result(pw_series_patch_1, Verdict.PASS, "Build Prep PASS")
         self.success()
@@ -1186,6 +1211,107 @@ class IncrementalBuild(CiBase):
         return (output, error)
 
 
+SCAN_BUILD_NOTE = '''*****************************************************************************
+The bugs reported by the scan-build may or may not be caused by your patches.
+Please check the list and fix the bugs if they are caused by your patch.
+*****************************************************************************
+'''
+
+class ScanBuild(CiBase):
+    name = "scan_build"
+    display_name = "Scan Build"
+    desc = "Run Scan Build with patches"
+
+    def config(self):
+        """
+        Configure the test cases
+        """
+        logger.debug("Parser configuration")
+
+        self.enable = config_enable(config, self.name)
+        self.submit_pw = config_submit_pw(config, self.name)
+
+    def run(self):
+        logger.debug("##### Run Scan Build Test #####")
+        self.start_timer()
+
+        self.config()
+
+        # Check if it is disabled.
+        if self.enable == False:
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Scan Build SKIP(Disabled)")
+            self.skip("Disabled in configuration")
+
+        # Only run if "checkbuild" success
+        if test_suite["build"].verdict != Verdict.PASS:
+            logger.info("build test is not success. skip this test")
+            self.submit_result(pw_series_patch_1, Verdict.SKIP,
+                               "Scan Build SKIP(Build Fail)")
+            self.skip("Build failed")
+
+        # Create the branch to come back later
+        (ret, stdout, stderr) = run_cmd("git", "checkout", "-b", "patched",
+                                        cwd=src5_dir)
+        if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "checkout patched branch FAIL: " + stderr)
+            self.add_failure_end_test(stderr)
+
+        # Make the source base to workflow branch
+        (ret, stdout, stderr) = run_cmd("git", "checkout", "origin/workflow",
+                                        cwd=src5_dir)
+        if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Checkout origin/workflow FAIL: " + stderr)
+            self.add_failure_end_test(stderr)
+
+        # Configure the build once
+        (ret, stdout, stderr) = run_cmd("./bootstrap-configure"
+                                        "--disable-asan", "--disable-lsan",
+                                        "--disable-ulsan", "--disable-android",
+                                        cwd=src5_dir)
+        if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Build Configuration FAIL: " + stderr)
+            self.add_failure_end_test(stderr)
+
+        # Make the baseline before running with patches
+        (ret, stdout, stderr) = run_cmd("scan-build", "make", cwd=src5_dir)
+        if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Scan Build FAIL: " + stderr)
+            self.add_failure_end_test(stderr)
+
+        # Checkout to the patched source
+        (ret, stdout, stderr) = run_cmd("git", "checkout", "patched",
+                                        cwd=src5_dir)
+        if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Checkout to Patched source FAIL: " + stderr)
+            self.add_failure_end_test(stderr)
+
+        # Run scan build again with patched source
+        (ret, stdout, stderr) = run_cmd("scan-build", "make", cwd=src5_dir)
+        if ret:
+            self.submit_result(pw_series_patch_1, Verdict.FAIL,
+                               "Scan Build w/patched FAIL: " + stderr)
+            self.add_failure_end_test(stderr)
+
+        # Process the result
+        # If stderr is not empty, some bugs are found. consider it warning
+        # instead of failure since it may not caused by the patch.
+        if stderr != "":
+            # Add warning
+            self.submit_result(pw_series_patch_1, Verdict.WARNING,
+                               "Scan-Build: " + stderr)
+            self.warning(SCAN_BUILD_NOTE + stderr)
+            return
+
+        self.submit_result(pw_series_patch_1, Verdict.PASS, "Pass")
+        self.success()
+
+
 class EndTest(Exception):
     """
     End of Test
@@ -1294,7 +1420,15 @@ def report_ci():
                                                test.desc,
                                                test.output)
             summary += ONELINE_RESULT.format(test=test.display_name,
-                                             result='ERROR',
+                                             result='SKIPPED',
+                                             elapsed=test.elapsed())
+        if test.verdict == Verdict.WARNING:
+            results += TEST_REPORT_FAIL.format(test.display_name,
+                                               "WARNING",
+                                               test.desc,
+                                               test.output)
+            summary += ONELINE_RESULT.format(test=test.display_name,
+                                             result='WARNING',
                                              elapsed=test.elapsed())
 
     body = EMAIL_MESSAGE.format(pw_series["web_url"], summary + '\n' + results)
@@ -1397,7 +1531,7 @@ def parse_args():
 
 def main():
 
-    global src_dir, src2_dir, src3_dir, src4_dir, ell_dir, base_dir
+    global src_dir, src2_dir, src3_dir, src4_dir, src5_dir, ell_dir, base_dir
 
     args = parse_args()
 
@@ -1413,7 +1547,11 @@ def main():
     src2_dir = src_dir + "2"
     src3_dir = src_dir + "3"
     src4_dir = src_dir + "4"
+    src5_dir = src_dir + "5"
     ell_dir = args.ell_path
+
+    # Add source dir to git safe dir
+    git_config_add_safe_dir(src_dir)
 
     # Fetch commits in the tree for checkpath and gitlint
     logger.debug("Fetch %d commits in the tree" % github_pr.commits)
