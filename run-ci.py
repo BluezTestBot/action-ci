@@ -709,7 +709,7 @@ class BuildSetup_ell(CiBase):
             self.add_failure_end_test(stderr)
 
         # make
-        (ret, stdout, stderr) = run_cmd("make", cwd=ell_dir)
+        (ret, stdout, stderr) = run_cmd("make", "-j2", cwd=ell_dir)
         if ret:
             self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                "Setup ELL - make FAIL: " + stderr)
@@ -844,7 +844,7 @@ class BuildMake(CiBase):
             self.skip("build test did not pass")
 
         # make
-        (ret, stdout, stderr) = run_cmd("make", cwd=src_dir)
+        (ret, stdout, stderr) = run_cmd("make", "-j2", cwd=src_dir)
         if ret:
             self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                "Make FAIL: " + stderr)
@@ -943,7 +943,7 @@ class MakeCheckValgrind(CiBase):
             self.add_failure_end_test(stderr)
 
         # make
-        (ret, stdout, stderr) = run_cmd("make", cwd=src4_dir)
+        (ret, stdout, stderr) = run_cmd("make", "-j2", cwd=src4_dir)
         if ret:
             self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                "Make FAIL: " + stderr)
@@ -1090,7 +1090,7 @@ class BuildExtEllMake(CiBase):
             self.skip("build_extell test did not pass")
 
         # make
-        (ret, stdout, stderr) = run_cmd("make", cwd=src2_dir)
+        (ret, stdout, stderr) = run_cmd("make", "-j2", cwd=src2_dir)
         if ret:
             self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                "Build Make with External ELL FAIL: " + stderr)
@@ -1173,7 +1173,7 @@ class IncrementalBuild(CiBase):
                 self.add_failure_end_test(stderr)
 
             # Make
-            (ret, stdout, stderr) = run_cmd("make", cwd=src3_dir)
+            (ret, stdout, stderr) = run_cmd("make", "-j2", cwd=src3_dir)
             if ret:
                 self.submit_result(patch, Verdict.FAIL,
                                    "Make FAIL: " + stderr)
@@ -1284,7 +1284,8 @@ class ScanBuild(CiBase):
             self.add_failure_end_test(stderr)
 
         # Make the baseline before running with patches
-        (ret, stdout, stderr) = run_cmd("scan-build", "make", cwd=src5_dir)
+        (ret, stdout, stderr) = run_cmd("scan-build", "make", "-j2",
+                                        cwd=src5_dir)
         if ret:
             self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                "Scan Build FAIL: " + stderr)
