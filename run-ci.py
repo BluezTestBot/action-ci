@@ -990,7 +990,10 @@ class MakeDistcheck(CiBase):
 
         # Actual test starts:
         # Configure
-        (ret, stdout, stderr) = run_cmd("./bootstrap-configure", cwd=src_dir)
+        (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
+                                        "--disable-asan", "--disable-lsan",
+                                        "--disable-ubsan", "--disable-android",
+                                        cwd=src_dir)
         if ret:
             self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                "Make Distcheck Configure FAIL: " + stderr)
@@ -1038,6 +1041,8 @@ class BuildExtEll(CiBase):
 
         # bootstrap-configure
         (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
+                                        "--disable-asan", "--disable-lsan",
+                                        "--disable-ubsan", "--disable-android",
                                         "--enable-external-ell",
                                         cwd=src2_dir)
         if ret:
@@ -1159,7 +1164,9 @@ class IncrementalBuild(CiBase):
 
             # Configure
             (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
-                                            cwd=src3_dir)
+                                            "--disable-asan", "--disable-lsan",
+                                            "--disable-ubsan",
+                                            "--disable-android", cwd=src3_dir)
             if ret:
                 self.submit_result(patch, Verdict.FAIL,
                                    "Build Configuration FAIL: " + stderr)
@@ -1267,9 +1274,9 @@ class ScanBuild(CiBase):
             self.add_failure_end_test(stderr)
 
         # Configure the build once
-        (ret, stdout, stderr) = run_cmd("./bootstrap-configure"
+        (ret, stdout, stderr) = run_cmd("./bootstrap-configure",
                                         "--disable-asan", "--disable-lsan",
-                                        "--disable-ulsan", "--disable-android",
+                                        "--disable-ubsan", "--disable-android",
                                         cwd=src5_dir)
         if ret:
             self.submit_result(pw_series_patch_1, Verdict.FAIL,
