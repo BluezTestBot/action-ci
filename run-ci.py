@@ -1291,6 +1291,11 @@ class ScanBuild(CiBase):
                                "Scan Build FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
+        # Save the stderr for later use
+        base_err_file = os.path.join(src5_dir, "scan_build_base.err")
+        with open(base_err_file, '+w') as f:
+            f.write(stderr)
+
         # Checkout to the patched source
         (ret, stdout, stderr) = run_cmd("git", "checkout", "patched",
                                         cwd=src5_dir)
@@ -1306,18 +1311,130 @@ class ScanBuild(CiBase):
                                "Scan Build w/patched FAIL: " + stderr)
             self.add_failure_end_test(stderr)
 
+        # Save the stderr for comparison with base erro file
+        patched_err_file = os.path.join(src5_dir, "scan_build_patched.err")
+        with open(patched_err_file, '+w') as f:
+            f.write(stderr)
+
         # Process the result
-        # If stderr is not empty, some bugs are found. consider it warning
-        # instead of failure since it may not caused by the patch.
-        if stderr != "":
+        base_out_dir = os.path.join(src5_dir, "scan_build_base")
+        self.parse_err_file(base_out_dir, base_err_file)
+        patched_out_dir = os.path.join(src5_dir, "scan_build_patched")
+        self.parse_err_file(patched_out_dir, patched_err_file)
+
+        outstr = self.diff_out_dirs(base_out_dir, patched_out_dir)
+        if outstr != "":
             # Add warning
             self.submit_result(pw_series_patch_1, Verdict.WARNING,
-                               "Scan-Build: " + stderr)
-            self.warning(SCAN_BUILD_NOTE + stderr)
+                               "Scan-Build: " + outstr)
+            self.warning(SCAN_BUILD_NOTE + outstr)
             return
 
         self.submit_result(pw_series_patch_1, Verdict.PASS, "Pass")
         self.success()
+
+    def read_err_lines(self, err_file):
+        err_lines = ""
+
+        logger.debug("Read err_file: %s" % err_file)
+
+        if os.path.isfile(err_file):
+            with open(err_file) as f:
+                err_lines = f.read()
+            return err_lines
+
+        if os.path.isdir(err_file):
+            for f in os.listdir(err_file):
+                err_lines += self.read_err_lines(os.path.join(err_file, f))
+
+        return err_lines
+
+    def diff_out_dirs(self, base_out_dir, patched_out_dir):
+        """
+        Diff two folders and find the new error in the patched dir
+        """
+        (ret, stdout, stderr) = run_cmd("diff", "-qr", base_out_dir,
+                                        patched_out_dir, cwd=src5_dir)
+
+        err_lines = ""
+        err_file = ""
+
+        if ret == 0:
+            logger.debug("No changes found. ")
+            return ""
+
+        for line in stdout.splitlines():
+            if line.startswith("Only in"):
+                if line.find(patched_out_dir) != -1:
+                    logger.debug("Found new issue in patched dir")
+                    # line looks like this:
+                    # "Only in /home/han1/work/dev/scratch/prs/1591/patched: lib"
+                    # "Only in /home/han1/work/dev/scratch/prs/1591/patched/monitor: hwdb.c.err"
+                    temp = line.replace("Only in ", '').split(": ")
+                    err_file = os.path.join(temp[0], temp[1])
+                    err_lines += self.read_err_lines(err_file)
+                continue
+
+            if line.startswith("Files "):
+                # line looks like this:
+                # Files /home/han1/work/dev/scratch/prs/1591/base/tools/test-runner.c.err and /home/han1/work/dev/scratch/prs/1591/patched/tools/test-runner.c.err differ
+                err_file = line.split(" and ")[1].split(" ")[0]
+                err_lines += self.read_err_lines(err_file)
+
+        return err_lines
+
+    def generate_err_file(self, out_dir, err_lines):
+        """
+        Read the first line to get the filename and create the folder and file
+        then copy the lines
+        """
+
+        line1 = err_lines.splitlines()[0]
+
+        # Some output starts with "In file included from "
+        if line1.find("In file included", 0, 20) >= 0:
+            line1 = line1.replace("In file included from ", '')
+
+        target_file_path = line1.split(':')[0]
+
+        target_path = os.path.join(out_dir, os.path.dirname(target_file_path))
+        target_file = os.path.join(target_path,
+                                   os.path.basename(target_file_path) + ".err")
+
+        if not os.path.exists(target_path):
+            os.makedirs(target_path, exist_ok=True)
+
+        # Save to local file
+        with open(target_file, 'w+') as f:
+            f.write(err_lines)
+
+        logger.debug("erro file is created: %s" % target_file)
+
+    def parse_err_file(self, out_dir, err_file):
+        """
+        Read scan-build error output file and create the file with error
+        output
+        """
+
+        logger.debug("Parse error file to %s" % out_dir)
+
+        file1 = open(err_file, 'r')
+        lines = file1.readlines()
+        file1.close()
+
+        err_lines = ""
+
+        for line in lines:
+            # Found key string
+            if line.find(' generated.') >= 0:
+                err_lines += line
+                self.generate_err_file(out_dir, err_lines)
+
+                # reset and continue
+                err_lines = ""
+                continue
+
+            err_lines += line
 
 
 class EndTest(Exception):
