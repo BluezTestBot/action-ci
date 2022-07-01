@@ -1104,7 +1104,7 @@ class BuildExtEllMake(CiBase):
 
 class IncrementalBuild(CiBase):
     name = "incremental_build"
-    display_name = "Incremental Build with patches"
+    display_name = "Incremental Build w/ patches"
     desc = "Incremental build per patch in the series"
 
     def config(self):
