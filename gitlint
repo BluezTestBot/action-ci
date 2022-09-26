@@ -47,3 +47,5 @@ min-length=1
 # it in the commit message.
 # files=gitlint/rules.py,README.md
 #
+[ignore-body-lines]
+regex=^Fixes:
