@@ -4,9 +4,20 @@ name: CI
 description: 'CI Action'
 
 inputs:
+  space:
+    description: Use "kernel" or "user" to distinguish the target CI tests
+    required: true
   src_path:
     description: Path of source (relative path from /github/workspace)
     required: true
+  bluez_path:
+    description: Path of bluez source (relative path from /github/workspace)
+    required: false
+    default: ""
+  output_path:
+    description: Output path (relative path from /github/workspace)
+    required: false
+    default: results
   github_token:
     description: github_token
     required: true
@@ -22,7 +33,11 @@ runs:
   image: 'Dockerfile'
   args:
     - ${{ inputs.src_path }}
+    - ${{ inputs.bluez_path }}
+    - ${{ inputs.output_path }}
+    - ${{ inputs.space }}
   env:
     GITHUB_TOKEN: ${{ inputs.github_token }}
     EMAIL_TOKEN: ${{ inputs.email_token }}
     PATCHWORK_TOKEN: ${{ inputs.patchwork_token }}
+
