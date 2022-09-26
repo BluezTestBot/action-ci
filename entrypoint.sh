@@ -28,7 +28,7 @@ echo "Input Parameters"
 echo "   Source Path:  $SRC_PATH"
 echo "   Bluez Path:   $BLUEZ_PATH"
 echo "   Output Path:  $OUTPUT_PATH"
-echo "   Space:        $SPACE
+echo "   Space:        $SPACE"
 
 if [[ -z $GITHUB_TOKEN ]]; then
 	echo "Set GITHUB_TOKEN environment variable"
