@@ -45,6 +45,11 @@ PR=${PR%"/merge"}
 if [[ $SPACE == "user" ]]; then
 	/run-ci.py -c /config.ini -p $PR -r $GITHUB_REPOSITORY -s $SRC_PATH -e $ELL_PATH -v
 elif [[ $SPACE == "kernel" ]]; then
+	# Copy tester.config from the upstream repo
+	wget --no-verbose --no-check-certificate \
+		https://git.kernel.org/pub/scm/bluetooth/bluez.git/plain/doc/tester.config \
+		-P $GITHUB_WORKSPACE/ && cp $GITHUB_WORKSPACE/tester.config /tester.config
+
 	/run-kernel-ci.py -c /kernel-config.ini -p $PR -r $GITHUB_REPOSITORY -s $SRC_PATH -b $BLUEZ_PATH -o $OUTPUT_PATH -v
 else
 	echo "Invalid parameter: SPACE: $SPACE"
