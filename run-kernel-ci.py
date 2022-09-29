@@ -1091,6 +1091,7 @@ class TestRunnerSetup(CiBase):
                              "rfcomm-tester",
                              "sco-tester",
                              "ioctl-tester",
+                             "mesh-tester",
                              "smp-tester",
                              "userchan-tester"]
 
