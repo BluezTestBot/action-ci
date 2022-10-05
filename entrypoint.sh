@@ -35,6 +35,12 @@ if [[ -z $GITHUB_TOKEN ]]; then
 	exit 1
 fi
 
+echo "Add the source dir to GIT safe directory"
+git config --global --add safe.directory $SRC_PATH
+
+echo "Add the BlueZ source dir to GIT safe directory"
+git config --global --add safe.directory $BLUEZ_PATH
+
 echo "Clone ELL source"
 git clone --depth=1 https://git.kernel.org/pub/scm/libs/ell/ell.git $ELL_PATH
 
