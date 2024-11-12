@@ -804,14 +804,14 @@ class BuildKernel(CiBase):
 
         # make
         if self.simple_build:
-            (ret, stdout, stderr) = run_cmd("make", "-j2", "W=1", "net/bluetooth/",
+            (ret, stdout, stderr) = run_cmd("make", "-j4", "W=1", "net/bluetooth/",
                                             cwd=src_dir)
             if ret:
                 self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                    "Build Kernel make FAIL: " + stderr)
                 self.add_failure_end_test(stderr)
 
-            (ret, stdout, stderr) = run_cmd("make", "-j2", "W=1", "drivers/bluetooth/",
+            (ret, stdout, stderr) = run_cmd("make", "-j4", "W=1", "drivers/bluetooth/",
                                             cwd=src_dir)
             if ret:
                 self.submit_result(pw_series_patch_1, Verdict.FAIL,
@@ -819,7 +819,7 @@ class BuildKernel(CiBase):
                 self.add_failure_end_test(stderr)
         else:
             # full build
-            (ret, stdout, stderr) = run_cmd("make", "-j2", cwd=src_dir)
+            (ret, stdout, stderr) = run_cmd("make", "-j4", cwd=src_dir)
             if ret:
                 self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                    "Build Kernel make FAIL: " + stderr)
@@ -887,14 +887,14 @@ class BuildKernel32(CiBase):
 
         # make
         if self.simple_build:
-            (ret, stdout, stderr) = run_cmd("make", "ARCH=i386", "-j2", "W=1", "net/bluetooth/",
+            (ret, stdout, stderr) = run_cmd("make", "ARCH=i386", "-j4", "W=1", "net/bluetooth/",
                                             cwd=src_dir)
             if ret:
                 self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                    "Build Kernel32 make FAIL: " + stderr)
                 self.add_failure_end_test(stderr)
 
-            (ret, stdout, stderr) = run_cmd("make", "ARCH=i386", "-j2", "W=1", "drivers/bluetooth/",
+            (ret, stdout, stderr) = run_cmd("make", "ARCH=i386", "-j4", "W=1", "drivers/bluetooth/",
                                             cwd=src_dir)
             if ret:
                 self.submit_result(pw_series_patch_1, Verdict.FAIL,
@@ -902,7 +902,7 @@ class BuildKernel32(CiBase):
                 self.add_failure_end_test(stderr)
         else:
             # full build
-            (ret, stdout, stderr) = run_cmd("make", "ARCH=i386", "-j2", cwd=src_dir)
+            (ret, stdout, stderr) = run_cmd("make", "ARCH=i386", "-j4", cwd=src_dir)
             if ret:
                 self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                    "Build Kernel32 make FAIL: " + stderr)
@@ -1014,14 +1014,14 @@ class IncrementalBuild(CiBase):
 
             # make
             if self.simple_build:
-                (ret, stdout, stderr) = run_cmd("make", "-j2", "W=1", "net/bluetooth/",
+                (ret, stdout, stderr) = run_cmd("make", "-j4", "W=1", "net/bluetooth/",
                                                 cwd=src2_dir)
                 if ret:
                     self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                        "Build Kernel make FAIL: " + stderr)
                     self.add_failure_end_test(stderr)
 
-                (ret, stdout, stderr) = run_cmd("make", "-j2", "W=1", "drivers/bluetooth/",
+                (ret, stdout, stderr) = run_cmd("make", "-j4", "W=1", "drivers/bluetooth/",
                                                 cwd=src2_dir)
                 if ret:
                     self.submit_result(pw_series_patch_1, Verdict.FAIL,
@@ -1029,7 +1029,7 @@ class IncrementalBuild(CiBase):
                     self.add_failure_end_test(stderr)
             else:
                 # full build
-                (ret, stdout, stderr) = run_cmd("make", "-j2", cwd=src2_dir)
+                (ret, stdout, stderr) = run_cmd("make", "-j4", cwd=src2_dir)
                 if ret:
                     self.submit_result(pw_series_patch_1, Verdict.FAIL,
                                        "Build Kernel make FAIL: " + stderr)
@@ -1119,7 +1119,7 @@ class TestRunnerSetup(CiBase):
 
         # make
         logger.info("Run make")
-        (ret, stdout, stderr) = run_cmd("make", "-j2", cwd=bluez_dir)
+        (ret, stdout, stderr) = run_cmd("make", "-j4", cwd=bluez_dir)
         if ret:
             logger.error("Unable to build bluez")
             return None
@@ -1159,7 +1159,7 @@ class TestRunnerSetup(CiBase):
             return None
 
         # make
-        (ret, stdout, stderr) = run_cmd("make", "-j2", cwd=src_dir)
+        (ret, stdout, stderr) = run_cmd("make", "-j4", cwd=src_dir)
         if ret:
             logger.error("Unable to make the image")
             return None
